@@ -1,10 +1,31 @@
 # InsoMac QA
 
-Verified on 14 November 2026. InsoMac remains a prototype with no public binary release. Closed-lid physical-panel illumination and fresh Codex capture/input remain unproven.
+Verified on 14 November 2026 for the [v0.1.0-preview.1 preview release](https://github.com/underconnor/insomac/releases/tag/v0.1.0-preview.1). Closed-lid built-in-panel illumination and fresh Codex capture/input remain unproven.
+
+## Distribution artifact
+
+| Item | Verified result |
+| --- | --- |
+| Package | `InsoMac-0.1.0-preview.1-universal.zip`, 152,546 bytes |
+| Bundle | `io.github.underconnor.insomac.prototype`, version `0.1.0`, build `1` |
+| Architectures | Universal arm64 and x86_64 |
+| Minimum macOS | 13.0 in the plist and both Mach-O slices; bounded native/runtime/UI checks passed in an arm64 13.0 VM |
+| Signing | Exact Developer ID Application identity/team, hardened runtime, secure timestamp, empty entitlements |
+| Apple notarization | Accepted; status code zero, no issues |
+| Ticket and assessment | Stapled ticket validates; Gatekeeper reports `Notarized Developer ID` |
+| ZIP integrity | Checksum, extraction, executable permissions, signature, ticket, and Gatekeeper checks passed |
+
+ZIP SHA-256:
+
+```text
+3cb10a665d41fda07dd2068e7f1820473cf27251d3989ffe9c64056208378aae
+```
+
+The app was compiled with Swift 6.4.2 and the macOS 27.2 SDK, then re-signed and packaged without recompilation. The manifest distinguishes the original build, the signed GUI-tested app, and the notarized export. Per-architecture comparison confirms matching code/data; signature allocation metadata is accounted for separately. Runtime policy and empty entitlements match the signed GUI-tested app. Later research-only commits are not represented as a rebuild.
 
 ## Native CI
 
-[Run 43563820029](https://github.com/underconnor/insomac/actions/runs/43563820029) passed all four jobs at source commit `5632b7ceb37bc593724dbb35a7d380916d72e195`:
+[Main run 43564206723](https://github.com/underconnor/insomac/actions/runs/43564206723) passed all four jobs at code-reference commit `b54932f2018e0f976e37068d8e79dd983e11dda9`:
 
 | Runner | Actual macOS | Native architecture | Xcode | Result |
 | --- | --- | --- | --- | --- |
@@ -13,66 +34,54 @@ Verified on 14 November 2026. InsoMac remains a prototype with no public binary 
 | `macos-26` | 26.7.2 | arm64 | 26.6 | Passed |
 | `macos-26-intel` | 26.6.1 | x86_64 | 26.6 | Passed |
 
-Each job built both slices of the universal app, checked its identity, executable permissions, macOS 13 deployment metadata, and ad-hoc signature, then executed its native slice through the rejected-parent startup path. That path exits before graphics, assertions, or display creation. It establishes native loading and startup, not menu or private-display compatibility.
+Each job built both slices and checked bundle identity, permissions, deployment metadata, and its ad-hoc build signature. It executed the native rejected-parent startup path, which exits before graphics, assertions, or display creation. This establishes native loading/startup on those hosts, not menu or private-display compatibility.
 
-All jobs also passed:
+The suite passed 22 session cases, six serialized-coordinator cases, two bounded process-I/O cases, and display-policy checks. It also verified real IOKit assertion acquisition/release, normal/abrupt-exit cleanup, blocked-worker parent monitoring, three immutable-input packaging regressions, and Mach CPU-time scaling against independent `getrusage`. Profiler compilation, preview packaging, extracted-bundle checks, and rejection of missing notarization credentials passed on every runner.
 
-- 22 session cases covering selection, rollback, failed-release retry, unavailable backends, and destruction.
-- Six coordinator cases covering responsiveness, accepted request ordering, notification coalescing, and bounded Quit handling.
-- Two process-I/O cases covering silent children, broken pipes, EOF, and bounded termination.
-- Display-policy checks for initial secondary status, later main-display promotion, and the remaining metadata guards.
-- Real IOKit assertion acquisition/readback/release and cleanup after normal exit and SIGKILL.
-- Parent rejection and cleanup of a deliberately blocked owned worker.
-- Three packaging regressions rejecting changed source, changed HEAD, or a newly dirty notarized checkout.
-- Mach CPU timebase scaling, including a native CPU-load comparison with independent `getrusage`.
-- Resource-profiler compilation, local-preview packaging, extracted-bundle verification, and rejection of missing notarization prerequisites.
+## macOS 13 validation
 
-The four CI candidates record the same captured build-input digest and clean source commit. Their checksums were verified after download. Logs, manifests, checksums, and candidate ZIPs are retained locally under ignored `build/qa/release-engineering-2026-11-14/ci-run-43563820029/`; GitHub artifacts have a 14-day retention period.
+A genuine macOS Ventura 13.0 (`22A380`) arm64 virtual machine passed the separate baseline: all 13 original artifact hashes matched, the original app's rejected-parent startup exited with status 2, and all eight native suites exited zero. This covers native loading and the core/IOKit/process/policy/timebase suites.
 
-## Local build and graphical checks
+The final V3 check verified the exact release ZIP and executable hashes, bundle metadata, all-architecture Developer ID signature, team/identifier/runtime, native rejected-parent exit 2, and offline Gatekeeper acceptance as `Notarized Developer ID`. All mandatory checks passed and the runner exited zero. Guest stapler was explicitly unavailable because only a developer-tool shim was present; no toolchain was installed and no guest stapler pass is claimed. The host had already validated the exact package's stapled ticket. Earlier runner/tool-availability failures remain in the private evidence.
 
-The updated local bundle is version `0.1.0`, build `1`, with identifier `io.github.underconnor.insomac.prototype`. It compiles with Swift 6.4.2 and the macOS 27.2 SDK on Apple Silicon macOS 27.2.1. The universal executable is 448,352 bytes and the bundle occupies 452 KiB on disk. These sizes describe the local Xcode 27.2 build; CI toolchains produce their own recorded binaries.
+A separate normal AppKit smoke of the final candidate showed the moon/Off status icon, Keep Screen On selected, menu Off → On through Turn On, and removal of the menu/status icon after Quit while On. This is visual/native-input evidence. It is not an independent guest assertion-inventory audit, a private virtual-display test, physical hardware testing, or a lid/panel test.
 
-The exact updated executable, SHA-256 `41c202a26fb8627bd49ab7d198aba718945c00e34a4aaa2aa80f0461a6d52c91`, passed a bounded native AX/CGEvent regression using actual mouse input to its own live menu targets:
+## Signed native GUI and cleanup
+
+An isolated Developer ID signed copy passed actual native AX/CGEvent interaction on Apple Silicon macOS 27.2.1:
 
 - Left-click Off → On → Off, right-click and Control-click menus, and the menu's Turn On action.
 - Accessible state/scope text, mode checkmarks, and exactly two owned idle-sleep assertions while On.
 - Changing an active session in either direction stops it and leaves the selected mode Off.
 - Virtual activation through the icon, with a fresh observer confirming 1280 × 720 logical and pixel dimensions.
-- Off explicitly sent while Starting was visible, followed by Off with no resources.
+- Off sent while Starting was visible, followed by Off with no resources.
 - Normal menu Quit while Keep Screen On was active, with exit status zero and assertion cleanup.
 
-The physical display's mode, main status, and mirroring were preserved. Final topology matched the starting topology, no owned assertion or snapshot process remained, and the pointer was restored. Actual menu crops were visually reviewed for legible, unclipped labels and checkmarks. The report and event evidence are retained under ignored `build/qa/native-gui-regression-2026-11-14/`. Earlier intermittent AX discovery attempts are retained there separately; the passing run used the uninstrumented release snapshot.
+The physical display's mode, main status, and mirroring were preserved. Final topology and pointer matched their starting state, with no owned assertion or process remaining. The signed run captured no screenshots. Earlier native-menu crops and the current light/dark rendered illustrations were visually checked for legibility; illustrations omit busy states and are not screenshots.
 
-The app presents Preparing, Starting, Stopping, Changing Mode, Checking, and Quitting activities with an hourglass. The README's rendered illustration shows resting states and mode choices only. Current light and dark illustrations were regenerated and visually checked; they are separate from actual native-menu captures.
+The current worker suite separately passed explicit stop, abrupt controlling-process exit, and abrupt owner exit. Each restored the starting topology; owner loss produced Error without retained resources. Graphical lifecycle checks passed accessory identity, launch Off, and normal AppKit termination.
 
-## Virtual display and cleanup
+A long-lived observer can still see an active display ID while `CGDisplayCopyDisplayMode` returns no mode. Fresh-observer metadata and native mouse-input success do not establish capture-client discovery, fresh captured frames, Codex Computer Use, or physical illumination.
 
-The current bounded worker suite also passed: it created a temporary 1280 × 720 display, read complete metadata from its owner and a fresh observer, and preserved the physical display's attributes. Explicit stop, abrupt controlling-process exit, and abrupt owner exit each restored the starting topology. Unexpected owner loss produced Error with no owned resources remaining. The current graphical lifecycle checks passed accessory identity, launch Off, and normal AppKit termination. Only owned test processes were terminated; a final exact-executable audit found none remaining.
+## Bounded resource sample
 
-These logs are retained under ignored `build/qa/release-engineering-2026-11-14/current-graphics-checks/`. A long-lived observer can still see an active display ID while `CGDisplayCopyDisplayMode` returns no mode. Fresh-observer metadata and native mouse-input success do not prove capture-client discovery, fresh captured frames, Codex Computer Use, or physical illumination.
-
-## Resource measurements
-
-A 60.004-second off-state sample of the exact updated executable recorded 31 samples after a five-second settling period. No project assertion appeared, owned-app cleanup completed, and both read-only memory diagnostics succeeded.
+A 60.004-second pre-signing off-state sample recorded 31 observations after a five-second settling period. No project assertion appeared, cleanup completed, and both read-only memory diagnostics succeeded. The final notarized package was not re-profiled.
 
 | Measurement | Observation |
 | --- | --- |
 | RSS | 73.17–73.53 MiB; the under-50 MiB target remains unmet |
-| Physical footprint | 13.27–13.64 MiB; reported separately from RSS |
+| Physical footprint | 13.27–13.64 MiB; a separate kernel ledger |
 | CPU delta | 7.923 ms, averaging about 0.0132% of one core |
 | Finished-launch observation | 0.378 seconds with 50 ms polling; one observation, not a benchmark |
 
-The original profiler mislabeled raw CPU ticks as nanoseconds. The retained raw sample was corrected using the independently measured same-host Mach timebase, 125/3 ns per tick. Original evidence remains unchanged; `corrected-summary.json` records the derivation. The profiler now records raw ticks and timebase explicitly. Its regression verifies both unit and non-unit timebases and compares a native CPU-load fixture with independent `getrusage`; it passes locally and on all four CI hosts. No second app sample was run to make this correction.
+Raw CPU ticks were corrected using the independently measured host Mach timebase, 125/3 ns per tick. Original evidence is preserved, with the derivation in `corrected-summary.json`. The profiler now records ticks and timebase explicitly; its unit/non-unit conversion and native `getrusage` regression pass locally and on all four CI hosts.
 
-The memory map reports about 13.4 MiB dirty/physical footprint and about 7.9 MiB resident malloc zones, with substantial shared framework/cache mappings. Those mapping totals cannot be summed as process RSS or used to attribute the target gap exactly. RSS varied by less than 0.4 MiB during the minute; this does not establish long-session behavior. No app optimization has been made from these observations. The detailed report and diagnostics are retained under ignored `build/qa/release-engineering-2026-11-14/off-state-profile-60s/`.
+The memory map reports about 13.4 MiB dirty/physical footprint and 7.9 MiB resident malloc zones, alongside shared framework/cache mappings. Mapping totals cannot be summed as process RSS or used to attribute the target gap exactly. RSS varied by less than 0.4 MiB during the minute; no long-session conclusion follows. No app optimization has been made from this sample.
 
-## Distribution and remaining coverage
+## Remaining coverage and retained evidence
 
-The current bundles and CI candidates use ad-hoc signatures. Developer ID signing, notarization, ticket stapling, and Gatekeeper acceptance have not completed. Missing credentials fail before a notarized candidate is built; a passing negative gate is not a signed release.
+Physical Intel GUI behavior, macOS 13 private-display behavior, VoiceOver, long sessions, battery/thermal behavior, lock behavior, and capture-client recovery require separate verification. No closed-lid, physical-panel, or Codex continuity claim follows from signing, notarization, native GUI tests, or source research.
 
-macOS 13 runtime, physical Intel hardware and graphical/private-display behavior outside the tested local host, VoiceOver, long sessions, battery/thermal behavior, lock behavior, and capture-client recovery still require separate verification. The macOS 13 minimum is a build/deployment target, not tested runtime coverage.
+Global power overrides and other apps' assertions can affect sleep independently. These checks installed no helper or login item, changed no persistent power setting, and terminated no unrelated application.
 
-Global power overrides and other apps' assertions can affect sleep independently. They were left unchanged. No lid, forced sleep, lock, or physical-panel experiment establishes product acceptance. Verification has not installed a helper, registered login startup, changed power settings, or terminated an unrelated application.
-
-Historical evidence and the private power-state attribution audit remain under ignored `build/qa/`. See [release preparation](RELEASE.md) for the candidate and signing workflow.
+CI logs and candidates, signed GUI evidence, source/payload comparisons, Apple distribution logs, resource data, and the exact prerelease ZIP are retained under ignored `build/qa/`. The key directories are `release-engineering-2026-11-14/`, `signed-native-gui-regression-2026-11-14/`, `macos13-runtime-2026-11-14/`, and the separately retained earlier native-menu reports. GitHub CI artifacts have a 14-day retention period. See [release preparation](RELEASE.md) for the two signing workflows.

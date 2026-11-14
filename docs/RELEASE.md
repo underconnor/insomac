@@ -2,6 +2,8 @@
 
 The packaging workflow produces candidates, not a claim that closed-lid physical illumination or computer use works. Those product requirements remain unverified. Signing and notarization do not establish them.
 
+The [v0.1.0-preview.1 preview release](https://github.com/underconnor/insomac/releases/tag/v0.1.0-preview.1) is Developer ID signed, notarized, stapled, and accepted by Gatekeeper, including after extraction. Its code and data match the reviewed application. The exact ZIP passed the bounded macOS 13 checks and basic native-menu smoke described in [QA](QA.md), which also records the checksum and remaining coverage.
+
 ## Native checks
 
 ```sh
@@ -19,7 +21,9 @@ The packaged native executable also runs its rejected-parent startup path and mu
 
 The native CI matrix uses `macos-15` and `macos-26` for arm64, and `macos-15-intel` and `macos-26-intel` for x86_64. Xcode 16.4 and 26.6 are selected explicitly. Action revisions are pinned. Actual host, toolchain, test, and package evidence is uploaded per job. macOS 13 remains a separate runtime requirement.
 
-[Run 43563820029](https://github.com/underconnor/insomac/actions/runs/43563820029) passed all four jobs at `5632b7ceb37bc593724dbb35a7d380916d72e195`, including CPU timebase regression checks. See [QA](QA.md) for the actual patch versions and graphical coverage.
+The macOS 13.0 arm64 VM baseline passed native rejected-parent startup and all eight native suites. The exact notarized ZIP then passed metadata/signature/hash checks, native startup, and offline Gatekeeper; a separate normal AppKit smoke showed menu Off → On and Quit removing the status item. Guest stapler was unavailable; host ticket validation passed. These results do not establish private-display behavior, physical hardware or lid/panel behavior, or an independent guest assertion-inventory audit.
+
+[Run 43564206723](https://github.com/underconnor/insomac/actions/runs/43564206723) passed all four jobs on main at `b54932f2018e0f976e37068d8e79dd983e11dda9`, including CPU timebase regression checks. See [QA](QA.md) for the actual patch versions and graphical coverage.
 
 Runner labels and Xcode availability were checked against [GitHub's runner reference](https://docs.github.com/en/actions/reference/runners/github-hosted-runners) and the [official runner images](https://github.com/actions/runner-images). Runner image updates can change patch versions; the workflow records what ran.
 
@@ -35,7 +39,7 @@ The output includes a versioned `local-preview` ZIP, `SHA256SUMS`, `release-mani
 
 `INSOMAC_BUILD_DIR` selects a separate build directory. Historical QA and approved snapshot records under ignored `build/` are preserved.
 
-## Developer ID and notarization
+## Scripted notarytool route
 
 The following configuration contains references and public identifiers, not passwords:
 
@@ -55,6 +59,32 @@ Missing or mismatched prerequisites fail before a candidate is built. The real p
 The resulting name remains `notarized-candidate`; product acceptance and final publication review are separate. No stable binary, tag, or release is created automatically.
 
 See Apple's [notarization requirements](https://developer.apple.com/documentation/security/notarizing-macos-software-before-distribution) and [command-line workflow](https://developer.apple.com/documentation/security/customizing-the-notarization-workflow).
+
+## Existing Xcode-account route
+
+This preview used a separate Xcode archive of the frozen validated app, without recompiling it. Local signing selected the verified Developer ID Application certificate by exact SHA-1, enabled hardened runtime and a secure timestamp, and added no entitlements. The archive's signing identity and team matched the real signature.
+
+For an existing signed application archive, `xcodebuild -exportArchive` can use the account already signed into Xcode. Export options select `method=developer-id`, `destination=upload`, `signingStyle=manual`, the exact `signingCertificate` fingerprint and `teamID`, and `stripSwiftSymbols=false`. This entitlement-free app needs no provisioning profile. Automatic/cloud signing and new certificate creation are not part of this route.
+
+```sh
+xcodebuild -exportArchive \
+  -archivePath "$INSOMAC_ARCHIVE_PATH" \
+  -exportOptionsPlist "$INSOMAC_EXPORT_OPTIONS" \
+  -exportPath "$INSOMAC_UPLOAD_OUTPUT" \
+  -allowProvisioningUpdates
+
+xcodebuild -exportNotarizedApp \
+  -archivePath "$INSOMAC_ARCHIVE_PATH" \
+  -exportPath "$INSOMAC_NOTARIZED_OUTPUT"
+```
+
+`-allowProvisioningUpdates` permits developer-site communication; manual targets may download missing profiles. Use the exact existing certificate and explicit manual signing rather than enabling automatic resource creation. Native Keychain access may require the user's password in the macOS dialog; never capture it or change key-access settings to bypass the prompt.
+
+Upload once and retain the submission and distribution logs. Poll that existing submission; `-exportNotarizedApp` exports an already notarized archive and does not submit a new one. This preview's Apple job was Accepted with status code zero and no issues. The exported ticket validated, Gatekeeper reported `Notarized Developer ID`, and the extracted final ZIP passed the same checks. Empty-entitlement, certificate/team, runtime/timestamp, and code/data comparisons also passed. The original archives and GUI-tested app were preserved separately.
+
+Signing changes executable signature metadata. The manifest distinguishes the original build, signed GUI-tested app, and notarized export; later research-documentation commits are not represented as a rebuild. Keep the exact verified ZIP unchanged for older-OS validation and publication.
+
+Apple documents this route in its [Developer ID overview](https://developer.apple.com/developer-id/), [Xcode 15 release notes](https://developer.apple.com/documentation/xcode-release-notes/xcode-15-release-notes/), and [WWDC21 distribution session](https://developer.apple.com/videos/play/wwdc2021/10204/). See [TN3125](https://developer.apple.com/documentation/technotes/tn3125-inside-code-signing-provisioning-profiles) for the entitlement/provisioning boundary.
 
 ## Bounded resource profile
 

@@ -25,11 +25,13 @@ open build/InsoMac.app
 ./scripts/check.sh
 ```
 
-For headless verification, run `./scripts/check.sh --headless`. [Native CI passed on all four Apple Silicon and Intel macOS 15/26 runners](https://github.com/underconnor/insomac/actions/runs/43563820029), covering core logic, real IOKit assertion cleanup, native executable startup, and candidate packaging. Menu interaction and virtual-display graphics require separate checks.
+For headless verification, run `./scripts/check.sh --headless`. [Native CI passed on all four Apple Silicon and Intel macOS 15/26 runners](https://github.com/underconnor/insomac/actions/runs/43564206723), covering core logic, real IOKit assertion cleanup, native executable startup, and candidate packaging. Menu interaction and virtual-display graphics require separate checks.
 
-Targets macOS 13 and later, with `arm64` and `x86_64` builds. Native menu toggles, mode changes, virtual activation, queued Off, and cleanup passed on the local Apple Silicon host. macOS 13 runtime testing remains pending. Private interfaces are checked at runtime and can be unavailable.
+Targets macOS 13 and later, with `arm64` and `x86_64` builds. The signed app passed native menu toggles, mode changes, virtual activation, queued Off, and cleanup on Apple Silicon macOS 27.2.1. The exact ZIP also passed signature, native startup, offline Gatekeeper, and a basic native-menu smoke in a macOS 13.0 arm64 VM. Private interfaces are checked at runtime and can be unavailable; macOS 13 private-display behavior and physical Intel GUI behavior remain unverified.
 
-The local app uses ad-hoc signing. It has no verified Developer ID signature or notarization and is not a public binary release.
+[Download v0.1.0-preview.1](https://github.com/underconnor/insomac/releases/tag/v0.1.0-preview.1). This preview release is Developer ID signed with hardened runtime, notarized, and stapled. Gatekeeper and extracted-ZIP checks passed. Extract the ZIP, move InsoMac.app to Applications, and open it. Ordinary source builds use ad-hoc signing.
+
+The pre-signing 60-second off-state sample recorded 73.17–73.53 MiB RSS, above the under-50 MiB target. Physical footprint was 13.27–13.64 MiB and is reported separately. See [QA](docs/QA.md) for measurements and compatibility limits.
 
 `./scripts/release.sh --mode local-preview --output build/release-candidate` creates a versioned review ZIP, checksums, and release notes. The separate notarized-candidate path rejects missing Developer ID or Keychain prerequisites. See [release preparation](docs/RELEASE.md); a local preview does not complete the unproven product requirements.
 
