@@ -44,9 +44,18 @@ These results predate the current coordinator/readback changes and are retained 
 
 ## Resource measurements
 
-The longer profiler compiles on all four CI hosts, but a 60–120 second updated-app sample has not run. It records kernel RSS, physical footprint, and cumulative CPU deltas separately; physical footprint does not replace the under-50 MiB RSS target.
+A 60.004-second off-state sample of the exact updated executable recorded 31 samples after a five-second settling period. No project assertion appeared, owned-app cleanup completed, and both read-only memory diagnostics succeeded.
 
-The earlier five-sample off-state baseline reported 73.08–73.13 MiB RSS, above that target. Reported CPU was initially 0.6%, then 0.0%, with cumulative CPU at 0:00.08. These short observations are historical, not sustained-performance results for the updated app.
+| Measurement | Observation |
+| --- | --- |
+| RSS | 73.17–73.53 MiB; the under-50 MiB target remains unmet |
+| Physical footprint | 13.27–13.64 MiB; reported separately from RSS |
+| CPU delta | 7.923 ms, averaging about 0.0132% of one core |
+| Finished-launch observation | 0.378 seconds with 50 ms polling; one observation, not a benchmark |
+
+The original profiler mislabeled raw CPU ticks as nanoseconds. The retained raw sample was corrected using the independently measured same-host Mach timebase, 125/3 ns per tick. Original evidence remains unchanged; `corrected-summary.json` records the derivation. The profiler now records raw ticks and timebase explicitly. A local regression verifies both unit and non-unit timebases and compares a native CPU-load fixture with independent `getrusage`. No second app sample was run to make this correction.
+
+The memory map reports about 13.4 MiB dirty/physical footprint and about 7.9 MiB resident malloc zones, with substantial shared framework/cache mappings. Those mapping totals cannot be summed as process RSS or used to attribute the target gap exactly. RSS varied by less than 0.4 MiB during the minute; this does not establish long-session behavior. No app optimization has been made from these observations. The detailed report and diagnostics are retained under ignored `build/qa/release-engineering-2026-11-14/off-state-profile-60s/`.
 
 ## Distribution and remaining coverage
 

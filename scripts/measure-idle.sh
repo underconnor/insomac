@@ -21,7 +21,7 @@ fi
 mkdir -p "$project_dir/build/tools"
 xcrun swiftc -parse-as-library -swift-version 6 -warnings-as-errors \
     -target "$(uname -m)-apple-macosx13.0" -sdk "$(xcrun --sdk macosx --show-sdk-path)" \
-    -framework AppKit -framework IOKit "$project_dir/Tools/MeasureIdle.swift" \
+    -framework AppKit -framework IOKit "$project_dir/Tools/MachTimebase.swift" "$project_dir/Tools/MeasureIdle.swift" \
     -o "$project_dir/build/tools/insomac-measure-idle"
 if $compile_only; then
     printf 'Compiled native resource measurement tool without launching an app.\n'

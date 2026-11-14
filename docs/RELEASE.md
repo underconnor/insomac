@@ -62,6 +62,8 @@ See Apple's [notarization requirements](https://developer.apple.com/documentatio
 ./scripts/measure-idle.sh 60 build/qa/profile-run
 ```
 
-The tool launches only its owned app off, waits five seconds for startup loading, then samples for 60–120 seconds. `proc_pid_rusage(RUSAGE_INFO_V4)` reports RSS bytes, the kernel physical-footprint ledger, and cumulative user/system CPU nanoseconds. Average one-core CPU is derived from the counter delta and measured elapsed time. The 50 MiB RSS target remains an RSS target; physical footprint does not replace it.
+The tool launches only its owned app off, waits five seconds for startup loading, then samples for 60–120 seconds. `proc_pid_rusage(RUSAGE_INFO_V4)` reports RSS bytes, the kernel physical-footprint ledger, and cumulative user/system CPU in Mach ticks. The tool records those ticks and the host's `mach_timebase_info`, scales the delta to nanoseconds, and divides by measured elapsed time for average one-core CPU. The 50 MiB RSS target remains an RSS target; physical footprint does not replace it.
+
+Apple XNU's [rusage implementation](https://github.com/apple-oss-distributions/xnu/blob/f6217f891ac0bb64f3d375211650a4c1ff8ca1ea/osfmk/kern/bsd_kern.c#L1260) copies the [task's Mach-time CPU counters](https://github.com/apple-oss-distributions/xnu/blob/f6217f891ac0bb64f3d375211650a4c1ff8ca1ea/osfmk/kern/task.c#L6811). A regression verifies non-unit scaling and compares a native CPU-load fixture with independent `getrusage`, which prevents an Intel 1:1 timebase from hiding an Apple Silicon unit error.
 
 Read-only `footprint` and `vmmap -summary` diagnostics are bounded and confined to the owned app. Permission failures are reported instead of elevated. The tool verifies no project keep-awake assertions, requests normal app termination, and reports cleanup. It captures no screen content. `INSOMAC_APP_PATH` selects an isolated app copy; `--compile-only` compiles the profiler without launching anything.

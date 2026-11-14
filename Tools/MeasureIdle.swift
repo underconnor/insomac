@@ -12,9 +12,9 @@ struct ResourceSample: Codable {
     let rssBytes: UInt64
     let physicalFootprintBytes: UInt64
     let peakPhysicalFootprintBytes: UInt64
-    let userCPUTimeNanoseconds: UInt64
-    let systemCPUTimeNanoseconds: UInt64
-    var cpuNanoseconds: UInt64 { userCPUTimeNanoseconds + systemCPUTimeNanoseconds }
+    let userCPUTimeMachTicks: UInt64
+    let systemCPUTimeMachTicks: UInt64
+    var cpuMachTicks: UInt64 { userCPUTimeMachTicks + systemCPUTimeMachTicks }
 }
 
 @main
@@ -36,6 +36,7 @@ struct MeasureIdle {
         }
         let executable = URL(fileURLWithPath: CommandLine.arguments[1])
         let directory = URL(fileURLWithPath: CommandLine.arguments[3], isDirectory: true)
+        let timebase = try MachTimebase.current()
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
         _ = NSApplication.shared
         let child = Process()
@@ -75,11 +76,15 @@ struct MeasureIdle {
                 throw MeasurementFailure(description: "No resource samples were recorded.")
             }
             let elapsed = last.elapsedSeconds - first.elapsedSeconds
-            let delta = last.cpuNanoseconds - first.cpuNanoseconds
+            let deltaTicks = last.cpuMachTicks - first.cpuMachTicks
+            let deltaNanoseconds = timebase.nanoseconds(forTicks: deltaTicks)
             let diagnostics = try captureDiagnostics(pid: child.processIdentifier, directory: directory)
             let binaryHash = SHA256.hash(data: try Data(contentsOf: executable)).map { String(format: "%02x", $0) }.joined()
             summary = [
-                "method": "proc_pid_rusage RUSAGE_INFO_V4; byte counts and nanosecond CPU counters",
+                "schema_version": 2,
+                "method": "proc_pid_rusage RUSAGE_INFO_V4; bytes and Mach CPU ticks scaled with mach_timebase_info",
+                "cpu_timebase_numerator": timebase.numerator,
+                "cpu_timebase_denominator": timebase.denominator,
                 "physical_footprint_definition": "kernel physical-footprint ledger; distinct from RSS and not a redefinition of the RSS target",
                 "app_binary_sha256": binaryHash,
                 "sampled_seconds": elapsed,
@@ -89,8 +94,9 @@ struct MeasureIdle {
                 "rss_max_bytes": samples.map(\.rssBytes).max() ?? 0,
                 "physical_footprint_min_bytes": samples.map(\.physicalFootprintBytes).min() ?? 0,
                 "physical_footprint_max_bytes": samples.map(\.physicalFootprintBytes).max() ?? 0,
-                "cpu_delta_nanoseconds": delta,
-                "average_cpu_percent_of_one_core": elapsed > 0 ? Double(delta) / 1e9 / elapsed * 100 : 0,
+                "cpu_delta_mach_ticks": deltaTicks,
+                "cpu_delta_nanoseconds": deltaNanoseconds,
+                "average_cpu_percent_of_one_core": elapsed > 0 ? deltaNanoseconds / 1e9 / elapsed * 100 : 0,
                 "observed_launch_seconds": launchSeconds,
                 "launch_poll_seconds": 0.05,
                 "off_state_assertions_verified": true,
@@ -98,14 +104,19 @@ struct MeasureIdle {
                 "diagnostics": diagnostics
             ]
         } catch { measurementError = error }
-        let cleaned = terminateOwned(child)
-        summary["cleanup_completed"] = cleaned
+        let cleanup = terminateOwned(child)
+        summary["cleanup_completed"] = cleanup.completed
+        summary["cleanup_forced"] = cleanup.forced
+        if cleanup.completed {
+            summary["termination_status"] = child.terminationStatus
+            summary["termination_reason"] = child.terminationReason == .exit ? "exit" : "uncaughtSignal"
+        }
         summary["timestamp"] = ISO8601DateFormatter().string(from: Date())
         if let measurementError { summary["failure"] = String(describing: measurementError) }
         let data = try JSONSerialization.data(withJSONObject: summary, options: [.prettyPrinted, .sortedKeys])
         try data.write(to: directory.appendingPathComponent("summary.json"))
         FileHandle.standardOutput.write(data + Data([10]))
-        guard cleaned else { throw MeasurementFailure(description: "The owned app did not exit within the cleanup bound.") }
+        guard cleanup.completed else { throw MeasurementFailure(description: "The owned app did not exit within the cleanup bound.") }
         if let measurementError { throw measurementError }
     }
 
@@ -120,7 +131,7 @@ struct MeasureIdle {
         return ResourceSample(elapsedSeconds: Double(DispatchTime.now().uptimeNanoseconds - started) / 1e9,
             rssBytes: info.ri_resident_size, physicalFootprintBytes: info.ri_phys_footprint,
             peakPhysicalFootprintBytes: info.ri_lifetime_max_phys_footprint,
-            userCPUTimeNanoseconds: info.ri_user_time, systemCPUTimeNanoseconds: info.ri_system_time)
+            userCPUTimeMachTicks: info.ri_user_time, systemCPUTimeMachTicks: info.ri_system_time)
     }
 
     private static func assertionCount(for pid: Int32) throws -> Int {
@@ -177,17 +188,19 @@ struct MeasureIdle {
     }
 
     @MainActor
-    private static func terminateOwned(_ child: Process) -> Bool {
+    private static func terminateOwned(_ child: Process) -> (completed: Bool, forced: Bool) {
+        var forced = false
         if child.isRunning {
             _ = NSRunningApplication(processIdentifier: child.processIdentifier)?.terminate()
             let deadline = Date().addingTimeInterval(5)
             while child.isRunning && Date() < deadline { pump(0.05) }
         }
         if child.isRunning {
+            forced = true
             kill(child.processIdentifier, SIGKILL)
             let deadline = Date().addingTimeInterval(1)
             while child.isRunning && Date() < deadline { pump(0.02) }
         }
-        return !child.isRunning
+        return (!child.isRunning, forced)
     }
 }

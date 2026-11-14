@@ -52,4 +52,10 @@ xcrun swiftc -parse-as-library -swift-version 6 -warnings-as-errors \
     -o "$test_dir/VirtualDisplayPolicyTests"
 "$test_dir/VirtualDisplayPolicyTests"
 
+xcrun swiftc -parse-as-library -swift-version 6 -warnings-as-errors \
+    -target "$(uname -m)-apple-macosx13.0" -sdk "$sdk_path" \
+    "$project_dir/Tools/MachTimebase.swift" "$project_dir/Tests/MachTimebaseTests.swift" \
+    -o "$test_dir/MachTimebaseTests"
+"$test_dir/MachTimebaseTests"
+
 PYTHONDONTWRITEBYTECODE=1 python3 "$project_dir/Tests/ReleaseToolingTests.py"
