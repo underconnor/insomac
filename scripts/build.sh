@@ -2,8 +2,12 @@
 set -euo pipefail
 
 project_dir="$(cd "$(dirname "$0")/.." && pwd)"
-build_dir="$project_dir/build"
-app_dir="$build_dir/InsoMac.app"
+build_dir="${INSOMAC_BUILD_DIR:-$project_dir/build}"
+mkdir -p "$build_dir"
+work_dir="$(mktemp -d "$build_dir/.bundle.XXXXXX")"
+trap 'rm -rf "$work_dir"' EXIT
+app_dir="$work_dir/InsoMac.app"
+target_app="$build_dir/InsoMac.app"
 sdk_path="$(xcrun --sdk macosx --show-sdk-path)"
 mkdir -p "$build_dir/arm64" "$build_dir/x86_64" "$app_dir/Contents/MacOS"
 
@@ -28,4 +32,6 @@ plutil -lint "$app_dir/Contents/Info.plist"
 codesign --force --sign - "$app_dir"
 codesign --verify --strict "$app_dir"
 xcrun lipo -archs "$app_dir/Contents/MacOS/InsoMac"
-printf 'Built %s\n' "$app_dir"
+rm -rf "$target_app"
+mv "$app_dir" "$target_app"
+printf 'Built %s\n' "$target_app"

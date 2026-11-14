@@ -31,7 +31,7 @@ protocol AssertionBackend: AnyObject {
     func release(_ assertion: OwnedAssertion) -> Result<Void, AssertionFailure>
 }
 
-enum SessionState: String {
+enum SessionState: String, Sendable {
     case off = "Off"
     case on = "On"
     case error = "Error"

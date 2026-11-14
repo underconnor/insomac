@@ -1,11 +1,13 @@
 import CoreGraphics
 import Foundation
+import os
 
 extension Notification.Name {
     static let virtualDisplayOwnerDidExit = Notification.Name("io.github.underconnor.insomac.virtual-display-owner-did-exit")
 }
 
 final class NativeVirtualDisplay: VirtualDisplayBackend {
+    private let logger = Logger(subsystem: "io.github.underconnor.insomac", category: "VirtualDisplay")
     private var process: Process?
     private var input: Pipe?
     private var output: Pipe?
@@ -28,7 +30,7 @@ final class NativeVirtualDisplay: VirtualDisplayBackend {
         child.arguments = [VirtualDisplayHost.argument, String(getpid())]
         let input = Pipe()
         let output = Pipe()
-        guard fcntl(input.fileHandleForWriting.fileDescriptor, F_SETNOSIGPIPE, 1) != -1 else {
+        guard VirtualDisplayProcessIO.prepareControlWriter(input.fileHandleForWriting) else {
             baselineIDs = nil
             return failure("Could not prepare the virtual display owner. Choose Keep Screen On.")
         }
@@ -50,18 +52,34 @@ final class NativeVirtualDisplay: VirtualDisplayBackend {
             guard response["ok"] as? Bool == true, ownedID != nil else {
                 return failure(response["error"] as? String ?? "Virtual display startup failed. Choose Keep Screen On.")
             }
-            return validate()
+            // AppKit's display-change notification can arrive after the owner's
+            // readiness reply. Let the parent's readback catch up off the UI thread.
+            let deadline = ProcessInfo.processInfo.systemUptime + 2
+            while let id = ownedID, child.isRunning,
+                  !InsoMacVirtualDisplayLayoutIsUsable(layout(for: id), true),
+                  ProcessInfo.processInfo.systemUptime < deadline {
+                Thread.sleep(forTimeInterval: 0.02)
+            }
+            return validate(requiresSecondaryDisplay: true)
         } catch {
             return failure("Could not start the virtual display owner. Turn off and try again.")
         }
     }
 
     func validate() -> Result<Void, VirtualDisplayFailure> {
-        guard process?.isRunning == true, let id = ownedID,
-              CGDisplayIsOnline(id) != 0, CGDisplayIsActive(id) != 0,
-              CGDisplayIsAsleep(id) == 0, CGDisplayIsBuiltin(id) == 0,
-              CGDisplayIsMain(id) == 0, CGDisplayMirrorsDisplay(id) == 0,
-              CGDisplayBounds(id).width == 1280, CGDisplayBounds(id).height == 720 else {
+        validate(requiresSecondaryDisplay: false)
+    }
+
+    private func validate(requiresSecondaryDisplay: Bool) -> Result<Void, VirtualDisplayFailure> {
+        guard process?.isRunning == true, let id = ownedID else {
+            return failure("The virtual display owner or display is unavailable. Turn off and try again.")
+        }
+        let readback = layout(for: id)
+        guard InsoMacVirtualDisplayLayoutIsUsable(readback, requiresSecondaryDisplay) else {
+            let detail = "initial=\(requiresSecondaryDisplay) online=\(readback.online) active=\(readback.active) "
+                + "asleep=\(readback.asleep) builtIn=\(readback.builtIn) main=\(readback.main) "
+                + "mirrored=\(readback.mirrored) width=\(readback.width) height=\(readback.height)"
+            logger.error("Owned virtual-display layout rejected: \(detail, privacy: .public)")
             return failure("The virtual display owner or display is unavailable. Turn off and try again.")
         }
         do {
@@ -90,15 +108,16 @@ final class NativeVirtualDisplay: VirtualDisplayBackend {
             }
         }
         try? input?.fileHandleForWriting.close()
-        let exitDeadline = Date().addingTimeInterval(1)
-        while process?.isRunning == true && Date() < exitDeadline { Thread.sleep(forTimeInterval: 0.01) }
-        if let process, process.isRunning {
-            kill(process.processIdentifier, SIGKILL)
-            process.waitUntilExit()
-            stopError = "The unresponsive virtual display owner was terminated."
+        if let process {
+            switch VirtualDisplayProcessIO.finish(process) {
+            case .exited: break
+            case .killed: stopError = "The unresponsive virtual display owner was terminated."
+            case .stillRunning:
+                return failure("The virtual display owner has not exited. Choose Release Again, or quit InsoMac.")
+            }
         }
-        let removalDeadline = Date().addingTimeInterval(2)
-        while !displayWasRemoved() && Date() < removalDeadline {
+        let removalDeadline = ProcessInfo.processInfo.systemUptime + 2
+        while !displayWasRemoved() && ProcessInfo.processInfo.systemUptime < removalDeadline {
             Thread.sleep(forTimeInterval: 0.02)
         }
         if !displayWasRemoved() {
@@ -115,14 +134,16 @@ final class NativeVirtualDisplay: VirtualDisplayBackend {
 
     private func readResponse(timeout: Int32) throws -> [String: Any] {
         guard let handle = output?.fileHandleForReading else { throw CocoaError(.fileReadUnknown) }
-        var descriptor = pollfd(fd: handle.fileDescriptor, events: Int16(POLLIN), revents: 0)
-        guard poll(&descriptor, 1, timeout) > 0 else { throw CocoaError(.fileReadUnknown) }
-        let data = handle.availableData
-        guard !data.isEmpty,
-              let response = try JSONSerialization.jsonObject(with: data) as? [String: Any] else {
-            throw CocoaError(.fileReadUnknown)
-        }
-        return response
+        return try VirtualDisplayProcessIO.readResponse(from: handle, timeout: timeout)
+    }
+
+    private func layout(for id: UInt32) -> InsoMacVirtualDisplayLayout {
+        let bounds = CGDisplayBounds(id)
+        return InsoMacVirtualDisplayLayout(
+            online: CGDisplayIsOnline(id) != 0, active: CGDisplayIsActive(id) != 0,
+            asleep: CGDisplayIsAsleep(id) != 0, builtIn: CGDisplayIsBuiltin(id) != 0,
+            main: CGDisplayIsMain(id) != 0, mirrored: CGDisplayMirrorsDisplay(id) != 0,
+            width: bounds.width, height: bounds.height)
     }
 
     private func onlineIDs() -> Set<UInt32>? {

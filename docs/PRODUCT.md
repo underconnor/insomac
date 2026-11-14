@@ -1,6 +1,6 @@
 # InsoMac product brief
 
-14 November 2026 · Research prototype
+14 November 2026 · Release preparation; original closed-lid requirements unresolved
 
 ## Purpose
 
@@ -20,10 +20,11 @@ The local prototype uses Swift, AppKit, and IOKit. Its physical-screen path prev
 | Left click | Toggle an indefinite session |
 | On | Filled cup icon and an accessible state label |
 | Off | Sleeping-moon icon; no InsoMac sleep assertions |
+| Starting or stopping | Hourglass and an accessible progress label; a second click during activation requests Off |
 | Right click | State, toggle, mode selection, current limitation, and Quit |
 | Change mode while on | Stop the session, clean up owned resources, then select the new mode; remain off |
 | Failure | Distinct error state; never show a successful session before assertions succeed |
-| Quit or process exit | Release process-owned assertions |
+| Quit or process exit | Release owned assertions and the temporary display; normal Quit keeps the UI responsive while cleanup runs |
 
 No accounts, telemetry, network service, third-party dependencies, or animation loop. Keep native dark-mode and accessibility behavior. Preserve the user's screen-lock policy. The utility itself must not capture screens or control other apps.
 
@@ -52,7 +53,7 @@ The next experiment must check actual Codex computer use across a lid close/open
 2. Implement the approved closed-lid approach and prove recovery after off, quit, crash, helper failure, power changes, and reboot.
 3. Verify on a physical Intel Mac and an Apple silicon Mac, including the oldest supported macOS. Record failures rather than generalizing from one machine.
 4. Measure idle CPU, memory, launch time, and archive size. Initial engineering targets: under 0.5% sustained idle CPU, under 50 MiB resident memory, and under 10 MiB for the app. Report measured values and method; these are not marketing claims.
-5. Review repository contents and license before repository creation. The public name InsoMac is approved; repository creation and publication still require review. Prepare a Developer ID signed and notarized download before a general public launch.
+5. Repository review and initial source publication are complete at [underconnor/insomac](https://github.com/underconnor/insomac). Prepare and verify a Developer ID signed and notarized download before a general public launch. Publishing a prototype or passing notarization does not establish the closed-lid capabilities above.
 
 Sessions have no arbitrary time limit. Do not advertise guaranteed operation until exactly 0% battery or override thermal and battery protection. Any proposed earlier cutoff is a product decision that must be presented explicitly.
 

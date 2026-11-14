@@ -44,6 +44,8 @@ This resolves ownership-process initialization for this prototype. It does not r
 
 ## Build and review
 
+Native CI, versioned candidate packaging, immutable build-input capture, Developer ID/notarization prerequisites, and the bounded kernel-counter resource profiler are documented in [release preparation](RELEASE.md). The production signing path fails closed and has not yet completed on this machine.
+
 The app name and executable are `InsoMac`, in `build/InsoMac.app`. Its local bundle identifier is `io.github.underconnor.insomac.prototype`, using the confirmed GitHub owner namespace. This identifies a local prototype; it does not establish Apple Developer team or domain ownership. Notifications, error domains, and process-monitor queues use the `io.github.underconnor.insomac` namespace.
 
 `scripts/build.sh` uses the selected Xcode SDK, Swift 6, and Clang with ARC. It compiles each architecture with deployment target 13.0 and warnings as errors, links the small bridge, combines binaries with `lipo`, validates the plist, and applies an ad-hoc local signature. It does not fetch dependencies or require an Xcode project. Full Xcode 16 or later is expected; Command Line Tools alone have not been validated.

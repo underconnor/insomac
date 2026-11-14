@@ -1,4 +1,4 @@
-enum KeepAwakeMode: String, CaseIterable {
+enum KeepAwakeMode: String, CaseIterable, Sendable {
     case screen = "Keep Screen On"
     case virtualDisplay = "Virtual Display (Experimental)"
 

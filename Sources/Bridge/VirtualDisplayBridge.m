@@ -6,6 +6,12 @@
 static const NSUInteger InsoMacWidth = 1280;
 static const NSUInteger InsoMacHeight = 720;
 
+BOOL InsoMacVirtualDisplayLayoutIsUsable(InsoMacVirtualDisplayLayout layout, BOOL requiresSecondaryDisplay) {
+    return layout.online && layout.active && !layout.asleep && !layout.builtIn && !layout.mirrored
+        && (!requiresSecondaryDisplay || !layout.main)
+        && layout.width == InsoMacWidth && layout.height == InsoMacHeight;
+}
+
 @protocol InsoMacDisplayInitializer
 - (instancetype)initWithDescriptor:(id)descriptor;
 @end
@@ -110,7 +116,7 @@ static NSSet<NSNumber *> *InsoMacOnlineIDs(void) {
         BOOL applied = ((BOOL (*)(id, SEL, id))objc_msgSend)(_display, NSSelectorFromString(@"applySettings:"), settings);
         if (!applied) return InsoMacFail(error, @"macOS refused the 1280 × 720 virtual mode. Choose Keep Screen On instead.");
         for (NSUInteger attempt = 0; attempt < 75; attempt++) {
-            if ([self validateWithError:nil]) return YES;
+            if ([self validateRequiringSecondaryDisplay:YES error:nil]) return YES;
             [NSThread sleepForTimeInterval:0.02];
         }
         return InsoMacFail(error, @"The virtual display did not become usable. Turn off and try again.");
@@ -120,10 +126,18 @@ static NSSet<NSNumber *> *InsoMacOnlineIDs(void) {
 }
 
 - (BOOL)validateWithError:(NSError **)error {
-    if (!_display || !_displayID || !CGDisplayIsOnline(_displayID) || !CGDisplayIsActive(_displayID)
-        || CGDisplayIsAsleep(_displayID) || CGDisplayIsBuiltin(_displayID)
-        || CGDisplayIsMain(_displayID) || CGDisplayMirrorsDisplay(_displayID) != kCGNullDirectDisplay
-        || CGDisplayBounds(_displayID).size.width != InsoMacWidth || CGDisplayBounds(_displayID).size.height != InsoMacHeight) {
+    return [self validateRequiringSecondaryDisplay:NO error:error];
+}
+
+- (BOOL)validateRequiringSecondaryDisplay:(BOOL)requiresSecondaryDisplay error:(NSError **)error {
+    CGRect bounds = CGDisplayBounds(_displayID);
+    InsoMacVirtualDisplayLayout layout = {
+        .online = CGDisplayIsOnline(_displayID), .active = CGDisplayIsActive(_displayID),
+        .asleep = CGDisplayIsAsleep(_displayID), .builtIn = CGDisplayIsBuiltin(_displayID),
+        .main = CGDisplayIsMain(_displayID), .mirrored = CGDisplayMirrorsDisplay(_displayID) != kCGNullDirectDisplay,
+        .width = bounds.size.width, .height = bounds.size.height
+    };
+    if (!_display || !_displayID || !InsoMacVirtualDisplayLayoutIsUsable(layout, requiresSecondaryDisplay)) {
         return InsoMacFail(error, @"The virtual display is unavailable or its layout changed. Turn off and try again.");
     }
     CGDisplayModeRef mode = CGDisplayCopyDisplayMode(_displayID);

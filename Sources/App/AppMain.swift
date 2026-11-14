@@ -2,15 +2,24 @@ import AppKit
 
 @MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate {
-    private let session = KeepAwakeSession(backend: IOKitAssertionBackend(), virtualDisplay: NativeVirtualDisplay())
+    private let coordinator = SessionCoordinator {
+        KeepAwakeSession(backend: IOKitAssertionBackend(), virtualDisplay: NativeVirtualDisplay())
+    }
     private var controller: StatusItemController?
+    private var terminationRequested = false
 
     func applicationDidFinishLaunching(_ notification: Notification) {
-        controller = StatusItemController(session: session)
+        controller = StatusItemController(coordinator: coordinator)
     }
 
-    func applicationWillTerminate(_ notification: Notification) {
-        session.stop()
+    func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
+        if !terminationRequested {
+            terminationRequested = true
+            coordinator.prepareToQuit { _ in
+                sender.reply(toApplicationShouldTerminate: true)
+            }
+        }
+        return .terminateLater
     }
 }
 

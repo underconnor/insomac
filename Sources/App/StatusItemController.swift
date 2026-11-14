@@ -2,7 +2,7 @@ import AppKit
 
 @MainActor
 final class StatusItemController: NSObject, NSMenuDelegate {
-    private let session: KeepAwakeSession
+    private let coordinator: SessionCoordinator
     private let statusItem: NSStatusItem
     private let menu = NSMenu()
     private let stateItem = NSMenuItem()
@@ -12,8 +12,8 @@ final class StatusItemController: NSObject, NSMenuDelegate {
     private var modeItems: [NSMenuItem] = []
     private let unavailableItem = NSMenuItem()
 
-    init(session: KeepAwakeSession) {
-        self.session = session
+    init(coordinator: SessionCoordinator) {
+        self.coordinator = coordinator
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
         super.init()
 
@@ -61,22 +61,23 @@ final class StatusItemController: NSObject, NSMenuDelegate {
                                                name: NSApplication.didChangeScreenParametersNotification, object: nil)
         NotificationCenter.default.addObserver(self, selector: #selector(displaysChanged(_:)),
                                                name: .virtualDisplayOwnerDidExit, object: nil)
+        coordinator.onChange = { [weak self] _ in self?.refresh() }
         refresh()
     }
 
     func menuWillOpen(_ menu: NSMenu) {
-        session.validateResources()
+        coordinator.validateResources()
         refresh()
     }
 
     @objc private func displaysChanged(_ notification: Notification) {
-        session.validateResources()
+        coordinator.validateResources()
         refresh()
     }
 
     @objc private func selectMode(_ sender: NSMenuItem) {
         guard KeepAwakeMode.allCases.indices.contains(sender.tag) else { return }
-        session.selectMode(KeepAwakeMode.allCases[sender.tag])
+        coordinator.selectMode(KeepAwakeMode.allCases[sender.tag])
         refresh()
     }
 
@@ -96,7 +97,7 @@ final class StatusItemController: NSObject, NSMenuDelegate {
     }
 
     @objc private func toggle() {
-        session.toggle()
+        coordinator.toggle()
         refresh()
     }
 
@@ -104,10 +105,11 @@ final class StatusItemController: NSObject, NSMenuDelegate {
         let alert = NSAlert()
         alert.alertStyle = .warning
         alert.messageText = "Keep-awake needs attention"
-        let nextStep = session.hasResources
+        let snapshot = coordinator.snapshot
+        let nextStep = snapshot.hasResources
             ? "Choose Release Again to retry cleanup, or quit InsoMac."
             : "Choose Try Again to start a new session."
-        alert.informativeText = session.errorMessages.joined(separator: "\n") + "\n\n" + nextStep
+        alert.informativeText = snapshot.errorMessages.joined(separator: "\n") + "\n\n" + nextStep
         alert.addButton(withTitle: "OK")
         NSApp.activate(ignoringOtherApps: true)
         alert.runModal()
@@ -118,24 +120,29 @@ final class StatusItemController: NSObject, NSMenuDelegate {
     }
 
     private func refresh() {
-        let presentation = StatusPresentation(state: session.state, hasResources: session.hasResources, mode: session.mode)
+        let snapshot = coordinator.snapshot
+        let presentation = StatusPresentation(state: snapshot.state, hasResources: snapshot.hasResources,
+                                              mode: snapshot.mode, activity: snapshot.activity,
+                                              requestedOn: snapshot.requestedOn)
         let image = NSImage(systemSymbolName: presentation.symbol, accessibilityDescription: presentation.label)
         image?.isTemplate = true
         statusItem.button?.image = image
         statusItem.button?.toolTip = presentation.label + " Click to toggle. Right-click for menu."
         statusItem.button?.setAccessibilityLabel(presentation.label)
-        statusItem.button?.setAccessibilityValue(session.state.rawValue)
+        statusItem.button?.setAccessibilityValue(snapshot.activity?.rawValue ?? snapshot.state.rawValue)
         stateItem.title = presentation.title
         scopeItem.title = presentation.scope
         toggleItem.title = presentation.action
-        errorItem.isHidden = session.errorMessages.isEmpty
+        toggleItem.isEnabled = !coordinator.isQuitting
+        errorItem.isHidden = snapshot.errorMessages.isEmpty
         for (index, item) in modeItems.enumerated() {
             let mode = KeepAwakeMode.allCases[index]
-            item.state = session.mode == mode ? .on : .off
-            item.isEnabled = mode != .virtualDisplay || session.virtualDisplayUnavailableReason == nil
+            item.state = snapshot.mode == mode ? .on : .off
+            item.isEnabled = !snapshot.isBusy && !coordinator.isQuitting
+                && (mode != .virtualDisplay || snapshot.virtualDisplayUnavailableReason == nil)
             item.toolTip = mode.limitation
         }
-        unavailableItem.isHidden = session.virtualDisplayUnavailableReason == nil
-        unavailableItem.title = session.virtualDisplayUnavailableReason ?? ""
+        unavailableItem.isHidden = snapshot.virtualDisplayUnavailableReason == nil
+        unavailableItem.title = snapshot.virtualDisplayUnavailableReason ?? ""
     }
 }

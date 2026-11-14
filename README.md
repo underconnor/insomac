@@ -25,9 +25,13 @@ open build/InsoMac.app
 ./scripts/check.sh
 ```
 
+For headless verification, run `./scripts/check.sh --headless`. [Native CI](https://github.com/underconnor/insomac/actions/workflows/ci.yml) builds and runs checks on supported Apple Silicon and Intel macOS runners. Graphical and virtual-display checks are separate from that coverage.
+
 Targets macOS 13 and later, with `arm64` and `x86_64` builds. Runtime testing covers Apple Silicon on macOS 27.2.1; Intel and macOS 13 execution remain untested. Private interfaces are checked at runtime and can be unavailable.
 
 The local app uses ad-hoc signing. It has no verified Developer ID signature or notarization and is not a public binary release.
+
+`./scripts/release.sh --mode local-preview --output build/release-candidate` creates a versioned review ZIP, checksums, and release notes. The separate notarized-candidate path rejects missing Developer ID or Keychain prerequisites. See [release preparation](docs/RELEASE.md); a local preview does not complete the unproven product requirements.
 
 `./scripts/test-virtual-display.sh` separately runs bounded creation and cleanup checks, temporarily changing the display list. `./scripts/preview.sh` refreshes light and dark rendered previews. Other developer tools are described in the [implementation notes](docs/IMPLEMENTATION.md).
 

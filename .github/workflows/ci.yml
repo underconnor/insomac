@@ -1,0 +1,81 @@
+name: Native verification
+
+on:
+  push:
+    branches: [main, 'release/**']
+    paths: ['Sources/**', 'Tests/**', 'Tools/**', 'scripts/**', 'Resources/**', '.github/workflows/**']
+  pull_request:
+    paths: ['Sources/**', 'Tests/**', 'Tools/**', 'scripts/**', 'Resources/**', '.github/workflows/**']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: native-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  native:
+    name: ${{ matrix.runner }} / ${{ matrix.architecture }}
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: macos-15
+            architecture: arm64
+            xcode: '16.4'
+          - runner: macos-15-intel
+            architecture: x86_64
+            xcode: '16.4'
+          - runner: macos-26
+            architecture: arm64
+            xcode: '26.6'
+          - runner: macos-26-intel
+            architecture: x86_64
+            xcode: '26.6'
+    env:
+      DEVELOPER_DIR: /Applications/Xcode_${{ matrix.xcode }}.app/Contents/Developer
+      INSOMAC_QA_DIR: ${{ github.workspace }}/build/qa/ci
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Record native runner and pinned toolchain
+        shell: bash
+        run: |
+          mkdir -p build/qa/ci
+          test "$(uname -m)" = '${{ matrix.architecture }}'
+          sw_vers | tee build/qa/ci/host.txt
+          uname -m | tee -a build/qa/ci/host.txt
+          xcodebuild -version | tee build/qa/ci/xcode.txt
+          xcrun swift --version | tee build/qa/ci/swift.txt
+      - name: Build, headless tests, and native executable startup
+        run: ./scripts/check.sh --headless
+      - name: Compile resource profiler without launching a GUI
+        run: ./scripts/measure-idle.sh --compile-only
+      - name: Package a local preview candidate
+        run: ./scripts/release.sh --mode local-preview --output build/release-candidate
+      - name: Verify missing release credentials fail closed
+        shell: bash
+        run: |
+          if env -u INSOMAC_SIGNING_IDENTITY -u INSOMAC_TEAM_ID -u INSOMAC_NOTARY_PROFILE ./scripts/release.sh --mode notarized --preflight-only > build/qa/ci/release-gate.log 2>&1; then
+            printf 'The release gate incorrectly accepted missing credentials.\n' >&2
+            exit 1
+          fi
+          grep -F 'Notarized release prerequisites are missing:' build/qa/ci/release-gate.log
+      - name: Save verification evidence and local preview
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: insomac-${{ matrix.runner }}-${{ github.sha }}
+          if-no-files-found: error
+          retention-days: 14
+          path: |
+            build/qa/ci/
+            build/release-candidate/*.zip
+            build/release-candidate/SHA256SUMS
+            build/release-candidate/release-manifest.json
+            build/release-candidate/RELEASE_NOTES.md

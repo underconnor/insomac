@@ -2,6 +2,14 @@
 
 Verified on 14 November 2026. This is a local prototype review, not a release certification.
 
+## Release-engineering follow-up
+
+The updated app compiles for both architectures, and the integrated headless checks pass locally: the original 22 session cases, six responsive coordinator cases, two bounded process-I/O cases, display-promotion policy, native assertion cleanup, and parent-exit monitoring. Three packaging regressions reject a concurrent input edit, changed HEAD, or newly dirty notarized checkout while building from captured inputs.
+
+Actual native-menu QA of the earlier bundle confirmed ordinary click/menu and physical-mode toggling, but virtual activation failed its parent metadata guard. The updated readback and coordinator changes have not yet been verified through the native menu. Headless and worker-mode results do not close that gap.
+
+The new CI workflow selects explicit supported macOS 15/26 Apple Silicon and Intel labels and toolchains. Its actual remote results are pending; macOS 13 runtime and physical Intel hardware behavior are separate claims. The longer kernel-counter profiler compiles, but no longer GUI/resource sample has run yet. Developer ID provisioning and notarization remain prerequisites, not completed results.
+
 ## Identity and build
 
 | Item | Result |

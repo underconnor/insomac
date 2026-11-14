@@ -4,3 +4,5 @@ build/
 *.xcuserstate
 xcuserdata/
 docs/REPOSITORY_REVIEW.md
+__pycache__/
+*.pyc

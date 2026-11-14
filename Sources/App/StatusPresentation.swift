@@ -2,9 +2,12 @@ struct StatusPresentation {
     let state: SessionState
     let hasResources: Bool
     var mode: KeepAwakeMode = .screen
+    var activity: SessionActivity?
+    var requestedOn: Bool?
 
     var symbol: String {
-        switch state {
+        if activity != nil { return "hourglass" }
+        return switch state {
         case .off: "moon.zzz"
         case .on: "cup.and.saucer.fill"
         case .error: "exclamationmark.triangle.fill"
@@ -14,12 +17,14 @@ struct StatusPresentation {
     var scope: String { mode.limitation }
     var label: String {
         let detail = mode == .screen ? "Open-lid only" : "Closed-lid use unverified"
-        return "InsoMac: \(state.rawValue). \(mode.rawValue). \(detail)."
+        return "InsoMac: \(activity?.rawValue ?? state.rawValue). \(mode.rawValue). \(detail)."
     }
-    var title: String { "Keep Awake: \(state.rawValue)" }
+    var title: String { "Keep Awake: \(activity?.rawValue ?? state.rawValue)" }
 
     var action: String {
-        if hasResources {
+        if activity == .quitting { return "Quitting…" }
+        if activity != nil, let requestedOn { return requestedOn ? "Turn Off" : "Turn On" }
+        return if hasResources {
             state == .error ? "Release Again" : "Turn Off"
         } else {
             state == .error ? "Try Again" : "Turn On"

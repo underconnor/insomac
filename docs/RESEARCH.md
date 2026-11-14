@@ -1,6 +1,6 @@
 # InsoMac: sleep and display research
 
-Research conducted 13 November 2026; naming updated 14 November 2026. Primary documentation and original source were reviewed. Research did not change persistent power settings, physical display settings, login items, or helpers. Bounded implementation tests created and removed temporary virtual displays.
+Research conducted 13–14 November 2026. Primary documentation and original source were reviewed. Research did not change persistent power settings, physical display settings, login items, or helpers. Bounded implementation tests created and removed temporary virtual displays.
 
 ## What is established
 
@@ -39,6 +39,16 @@ DeskPad creates and retains a CGVirtualDisplay and captures its separate display
 Dispres requires a separate, manual privileged SleepDisabled setting before closed-lid use. Its virtual display alone does not supply that behavior. The app watches lid state, promotes a virtual display to main on closure, and returns to the built-in display on reopening. Its source explicitly describes the closed built-in panel as off even when it remains listed as active. Thus neither an active-display flag nor a virtual display proves physical illumination. [Pinned prerequisite](https://github.com/adevra/macOS-Dispres/blob/056384069edf8851629aee957f9a3ab0469c2b9f/README.md), [lid handling and panel comments](https://github.com/adevra/macOS-Dispres/blob/056384069edf8851629aee957f9a3ab0469c2b9f/Sources/Dispres/Services/RecoveryService.swift#L220)
 
 The local virtual-mode experiment is limited to resource ownership: create one temporary display, verify configuration, then remove it and verify the original topology returns, including after abrupt owner exit. It does not change the main display, mirror a physical display, or change global sleep settings. This is an implementation stage, not a substitute for the requested closed-lid behavior. A later implementation needs separate evidence for sleep control, desktop handoff, fresh capture, input routing, repeated reopening, and physical-panel behavior.
+
+### Closed-panel power and a remaining experiment
+
+The published Intel backlight driver handles lid closure separately from system sleep: its clamshell state clamps brightness or selects display power off. That source is explicitly x86_64-specific, so it must not be used to claim the same driver implementation on Apple silicon. Apple's power management source also forwards a separate closed-lid display-power request to WindowServer. These paths explain why keeping the computer awake does not establish an illuminated panel; they do not prove a universal electrical interlock. [Intel backlight policy](https://github.com/apple-oss-distributions/IOGraphics/blob/76285384ff0ce63965a21b8023bf6d7e447fcc19/IOGraphicsFamily/IOBacklightDisplay.cpp#L753-L929), [display-power request](https://github.com/apple-oss-distributions/PowerManagement/blob/d415e45501842834a280930c3eed9186544a67f0/pmconfigd/PMDisplay.m#L544-L560).
+
+The private `SLSDisplayPowerControlClient` path is also an authorization boundary: Apple's power daemon carries the restricted `com.apple.private.SkyLight.displaypowercontrol` entitlement. An ordinary Developer ID signature does not grant it. [Apple entitlement](https://github.com/apple-oss-distributions/PowerManagement/blob/d415e45501842834a280930c3eed9186544a67f0/pmconfigd/entitlements.plist#L27-L30).
+
+One untested lead is a per-session `CGSConfigureDisplayEnabled` or `SLSConfigureDisplayEnabled` request. An original M2 Max investigation used it to recover a physically open panel when the logical lid signal incorrectly said closed. Its evidence does not cover a physically closed lid or prove that backlight power returns. Any experiment must identify the real built-in display, record the existing configuration, provide bounded recovery, and independently measure emitted panel light. It must not infer success from a return code, an online-display flag, or a captured image. This technique is not implemented or claimed by InsoMac. [Pinned implementation](https://github.com/bordeux/macbook-clamshell-fix/blob/1c089960fb1c03c7a993e18015ba14aa168f4588/display-on.c#L95-L121), [original observations](https://github.com/bordeux/macbook-clamshell-fix/blob/1c089960fb1c03c7a993e18015ba14aa168f4588/README.md#L24-L64).
+
+Virtual-display validation must allow the operating system or user to promote an already-owned display to main, while still creating it as secondary and never changing the user's main display itself. Rejecting every main-display state would end a session precisely when a physical display disappears. This policy requires regression coverage and a separate real lid/capture/input test; it does not solve forced system sleep or physical illumination.
 
 ## Related projects
 
