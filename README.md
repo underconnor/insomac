@@ -1,0 +1,34 @@
+# InsoMac
+
+A small native macOS menu bar prototype for keeping a Mac awake.
+
+| Mode | Current behavior |
+| --- | --- |
+| **Keep Screen On** | Prevents idle system and display sleep with the lid open. This is the default. |
+| **Virtual Display (Experimental)** | Adds a temporary 1280 × 720 secondary display and prevents idle sleep. Uses private macOS interfaces. |
+
+**Closed-lid behavior, physical-panel illumination, and Codex capture/input are unproven.** A virtual display does not establish those capabilities. Existing clients may also fail to discover its mode correctly.
+
+Left-click to toggle. Right-click or Control-click for the menu. Changing mode stops the session and leaves the new mode off. Every launch starts off. State uses distinct symbols and accessibility labels.
+
+Virtual mode owns a temporary unprivileged process and display; it can affect desktop layout while active. Cleanup includes independent parent-exit monitoring. No accounts, analytics, network calls, third-party dependencies, helper installation, or power-setting changes.
+
+Rendered state preview, generated from the app's labels and symbols; this is not a desktop screenshot:
+
+![InsoMac rendered state and mode preview](docs/assets/insomac-states-light.png)
+
+Build with Xcode 16 or later:
+
+```sh
+./scripts/build.sh
+open build/InsoMac.app
+./scripts/check.sh
+```
+
+Targets macOS 13 and later, with `arm64` and `x86_64` builds. Runtime testing covers Apple Silicon on macOS 27.2.1; Intel and macOS 13 execution remain untested. Private interfaces are checked at runtime and can be unavailable.
+
+The local app uses ad-hoc signing. It has no verified Developer ID signature or notarization and is not a public binary release.
+
+`./scripts/test-virtual-display.sh` separately runs bounded creation and cleanup checks, temporarily changing the display list. `./scripts/preview.sh` refreshes light and dark rendered previews. Other developer tools are described in the [implementation notes](docs/IMPLEMENTATION.md).
+
+See [QA evidence and limits](docs/QA.md) and the [MIT license](LICENSE).
