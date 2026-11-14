@@ -9,11 +9,11 @@ A small native macOS menu bar prototype for keeping a Mac awake.
 
 **Closed-lid behavior, physical-panel illumination, and Codex capture/input are unproven.** A virtual display does not establish those capabilities. Existing clients may also fail to discover its mode correctly.
 
-Left-click to toggle. Right-click or Control-click for the menu. Changing mode stops the session and leaves the new mode off. Every launch starts off. State uses distinct symbols and accessibility labels.
+Left-click to toggle. Right-click or Control-click for the menu. Changing mode stops the session and leaves the new mode off. Every launch starts off. State uses distinct symbols and accessibility labels, with an hourglass while work is in progress.
 
 Virtual mode owns a temporary unprivileged process and display; it can affect desktop layout while active. Cleanup includes independent parent-exit monitoring. No accounts, analytics, network calls, third-party dependencies, helper installation, or power-setting changes.
 
-Rendered state preview, generated from the app's labels and symbols; this is not a desktop screenshot:
+Rendered illustration of the resting states and mode menu. Busy states are omitted; this is not a desktop screenshot:
 
 ![InsoMac rendered state and mode preview](docs/assets/insomac-states-light.png)
 
@@ -25,9 +25,9 @@ open build/InsoMac.app
 ./scripts/check.sh
 ```
 
-For headless verification, run `./scripts/check.sh --headless`. [Native CI](https://github.com/underconnor/insomac/actions/workflows/ci.yml) builds and runs checks on supported Apple Silicon and Intel macOS runners. Graphical and virtual-display checks are separate from that coverage.
+For headless verification, run `./scripts/check.sh --headless`. [Native CI passed on all four Apple Silicon and Intel macOS 15/26 runners](https://github.com/underconnor/insomac/actions/runs/43561932870), covering core logic, real IOKit assertion cleanup, native executable startup, and candidate packaging. Menu interaction and virtual-display graphics require separate checks.
 
-Targets macOS 13 and later, with `arm64` and `x86_64` builds. Runtime testing covers Apple Silicon on macOS 27.2.1; Intel and macOS 13 execution remain untested. Private interfaces are checked at runtime and can be unavailable.
+Targets macOS 13 and later, with `arm64` and `x86_64` builds. macOS 13 runtime testing and the updated app's local graphical retest remain pending. Private interfaces are checked at runtime and can be unavailable.
 
 The local app uses ad-hoc signing. It has no verified Developer ID signature or notarization and is not a public binary release.
 

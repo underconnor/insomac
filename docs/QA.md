@@ -1,75 +1,59 @@
 # InsoMac QA
 
-Verified on 14 November 2026. This is a local prototype review, not a release certification.
+Verified on 14 November 2026. InsoMac remains a prototype with no public binary release. Closed-lid physical-panel illumination and fresh Codex capture/input remain unproven.
 
-## Release-engineering follow-up
+## Native CI
 
-The updated app compiles for both architectures, and the integrated headless checks pass locally: the original 22 session cases, six responsive coordinator cases, two bounded process-I/O cases, display-promotion policy, native assertion cleanup, and parent-exit monitoring. Three packaging regressions reject a concurrent input edit, changed HEAD, or newly dirty notarized checkout while building from captured inputs.
+[Run 43561932870](https://github.com/underconnor/insomac/actions/runs/43561932870) passed all four jobs at source commit `e6d0abe7d6efa1fe52c3eccc3be170397b419500`:
 
-Actual native-menu QA of the earlier bundle confirmed ordinary click/menu and physical-mode toggling, but virtual activation failed its parent metadata guard. The updated readback and coordinator changes have not yet been verified through the native menu. Headless and worker-mode results do not close that gap.
+| Runner | Actual macOS | Native architecture | Xcode | Result |
+| --- | --- | --- | --- | --- |
+| `macos-15` | 15.8.2 | arm64 | 16.4 | Passed |
+| `macos-15-intel` | 15.7.9 | x86_64 | 16.4 | Passed |
+| `macos-26` | 26.7.2 | arm64 | 26.6 | Passed |
+| `macos-26-intel` | 26.6.1 | x86_64 | 26.6 | Passed |
 
-The new CI workflow selects explicit supported macOS 15/26 Apple Silicon and Intel labels and toolchains. Its actual remote results are pending; macOS 13 runtime and physical Intel hardware behavior are separate claims. The longer kernel-counter profiler compiles, but no longer GUI/resource sample has run yet. Developer ID provisioning and notarization remain prerequisites, not completed results.
+Each job built both slices of the universal app, checked its identity, executable permissions, macOS 13 deployment metadata, and ad-hoc signature, then executed its native slice through the rejected-parent startup path. That path exits before graphics, assertions, or display creation. It establishes native loading and startup, not menu or private-display compatibility.
 
-## Identity and build
+All jobs also passed:
 
-| Item | Result |
-| --- | --- |
-| App and executable | `build/InsoMac.app`, `Contents/MacOS/InsoMac` |
-| Bundle identifier | `io.github.underconnor.insomac.prototype` |
-| Version | `0.1.0` / build `1` |
-| Architectures | Universal `arm64` and `x86_64`; both compiled successfully |
-| Minimum macOS | `13.0` in the plist and both Mach-O slices |
-| Local host | Apple Silicon, macOS `27.2.1` (`26B8132`) |
-| Toolchain | Apple Swift `6.4.2`, macOS SDK `27.2`, selected Xcode tools |
-| Signing | Ad-hoc; identifier matches the bundle; no Developer ID team |
-| Distribution | No notarization or public binary release |
+- 22 session cases covering selection, rollback, failed-release retry, unavailable backends, and destruction.
+- Six coordinator cases covering responsiveness, accepted request ordering, notification coalescing, and bounded Quit handling.
+- Two process-I/O cases covering silent children, broken pipes, EOF, and bounded termination.
+- Display-policy checks for initial secondary status, later main-display promotion, and the remaining metadata guards.
+- Real IOKit assertion acquisition/readback/release and cleanup after normal exit and SIGKILL.
+- Parent rejection and cleanup of a deliberately blocked owned worker.
+- Three packaging regressions rejecting changed source, changed HEAD, or a newly dirty notarized checkout.
+- Resource-profiler compilation, local-preview packaging, extracted-bundle verification, and rejection of missing notarization prerequisites.
 
-`plutil -lint`, `codesign --verify --strict`, architecture inspection, and shell syntax checks passed. Bundle identity is local prototype metadata, not evidence of Apple Developer team ownership.
+The four CI candidates record the same captured build-input digest and clean source commit. Their checksums were verified after download. Logs, manifests, checksums, and candidate ZIPs are retained locally under ignored `build/qa/release-engineering-2026-11-14/ci-run-43561932870/`; GitHub artifacts have a 14-day retention period.
 
-## Existing checks
+## Local build and graphical checks
 
-`./scripts/check.sh` passed with warnings treated as errors. Existing checks now also verify the renamed bundle, executable, display name, running-app identity, and accessibility-label prefix. No new test suite was added for the rename.
+The updated local bundle is version `0.1.0`, build `1`, with identifier `io.github.underconnor.insomac.prototype`. It compiles with Swift 6.4.2 and the macOS 27.2 SDK on Apple Silicon macOS 27.2.1. The universal executable is 448,352 bytes and the bundle occupies 452 KiB on disk. These sizes describe the local Xcode 27.2 build; CI toolchains produce their own recorded binaries.
 
-- All 22 session tests passed, including selection, rollback, release retry, runtime unavailability, and deinitialization.
-- Distinct state symbols, accessible labels, and mode-specific limitations passed.
-- Both real IOKit assertions were acquired, read back, released, and confirmed absent.
-- Assertion cleanup after normal process exit and SIGKILL passed for owned test processes.
-- Parent identity rejection and cleanup of a deliberately blocked worker passed. No native API hang was reproduced.
-- The renamed app launched off as a menu bar accessory and terminated normally.
-- Light and dark rendered previews were regenerated and visually reviewed. Names, checkmarks, mode limits, and actions were legible without clipping.
+The updated headless suite passes locally. The updated native-menu retest remains incomplete. The earlier bundle passed left-click, right-click, Control-click, and Keep Screen On toggling, but virtual activation through its menu failed the parent metadata guard. Updated and earlier bundles were both undiscoverable in a subsequent shared menu-bar environment; the updated app finished launching and its main thread was idle in the normal AppKit event loop. No successful updated-menu activation is inferred from those observations.
 
-The README references `docs/assets/insomac-states-light.png`; the dark variant is alongside it. These files are outside ignored build output and can be included with source. They are rendered previews, not desktop screenshots.
+The app now presents Preparing, Starting, Stopping, Changing Mode, Checking, and Quitting activities with an hourglass. The README's rendered illustration shows resting states and mode choices only. Earlier light/dark illustration checks do not verify the current native menu or busy states.
 
-## Experimental virtual display
+## Historical virtual-display smoke checks
 
-The existing bounded smoke test passed after initializing AppKit and screen metadata in the controlling process. Each case created one temporary 1280 × 720 display, verified full mode metadata through its isolated owner and a fresh independent observer, and preserved the physical display's mode, main status, and mirroring.
+Earlier bounded worker tests created a temporary 1280 × 720 display, read complete mode metadata from its owner and a fresh observer, and preserved the physical display's mode, main status, and mirroring. Explicit stop, abrupt controlling-process exit, and abrupt owner exit restored the baseline topology. Unexpected owner loss produced Error with no owned resources remaining. Only owned test processes were terminated.
 
-Explicit stop, abrupt controlling-process exit, and abrupt display-owner exit all restored exact baseline topology. Unexpected owner loss produced Error with no owned resources remaining. Only owned test processes were terminated.
+These results predate the current coordinator/readback changes and are retained as a historical baseline. They do not resolve the native-menu activation failure. A long-lived observer can see an active display ID while `CGDisplayCopyDisplayMode` returns no mode. Fresh-observer metadata does not prove capture-client discovery, fresh frames, input delivery, or physical illumination.
 
-The final read-only cleanup audit found zero project workers and zero project assertions. Display topology matched the pre-test baseline. Existing system power state and unrelated applications were left unchanged.
+## Resource measurements
 
-A long-lived observer can still see an active ID while receiving no mode from `CGDisplayCopyDisplayMode`. Isolated ownership enables this prototype's own full readback, and a fresh observer confirms metadata visibility. This does not prove discovery by an existing capture client, fresh frames, input delivery, closed-lid survival, or physical-panel illumination.
+The longer profiler compiles on all four CI hosts, but a 60–120 second updated-app sample has not run. It records kernel RSS, physical footprint, and cumulative CPU deltas separately; physical footprint does not replace the under-50 MiB RSS target.
 
-## Size and bounded resource sample
+The earlier five-sample off-state baseline reported 73.08–73.13 MiB RSS, above that target. Reported CPU was initially 0.6%, then 0.0%, with cumulative CPU at 0:00.08. These short observations are historical, not sustained-performance results for the updated app.
 
-The universal executable is **363,616 bytes**. The app occupies **368 KiB** on disk. `build/InsoMac-prototype.zip` is **109,666 bytes** and passed `unzip -t`.
+## Distribution and remaining coverage
 
-Five one-second-spaced off-state samples reported **73.08–73.13 MiB RSS**. CPU was initially `0.6%`, then `0.0%` in the remaining samples; displayed cumulative CPU stayed at `0:00.08`. The finished-launch flag was observed after `0.110` seconds with 50 ms polling. These are short local observations, not sustained-performance or launch benchmarks. The initial under-50 MiB RSS target remains unmet.
+The current bundles and CI candidates use ad-hoc signatures. Developer ID signing, notarization, ticket stapling, and Gatekeeper acceptance have not completed. Missing credentials fail before a notarized candidate is built; a passing negative gate is not a signed release.
 
-The virtual smoke's controlling test process increased from 29,920 KiB before activation to 31,808 KiB during active samples; its separate display owner used 11,520 KiB at readiness. Summed additional RSS was about 13.09 MiB. This test-controller measurement excludes WindowServer/GPU cost and may count shared pages twice; it is not total production-app overhead.
+macOS 13 runtime, physical Intel hardware, the updated native menu and private-display path, VoiceOver, long sessions, battery/thermal behavior, lock behavior, and capture-client recovery still require separate verification. The macOS 13 minimum is a build/deployment target, not tested runtime coverage.
 
-## Attribution and remaining limits
+Global power overrides and other apps' assertions can affect sleep independently. They were left unchanged. No lid, forced sleep, lock, or physical-panel experiment establishes product acceptance. Verification has not installed a helper, registered login startup, changed power settings, or terminated an unrelated application.
 
-Global power overrides and other apps' assertions can invalidate sleep attribution. They were left unchanged. Verification covers ownership, display metadata, and cleanup; no lid, sleep, lock, physical-panel, or computer-use conclusion follows from these checks.
-
-- Physical Keep Screen On behavior is limited to the open-lid idle-sleep path.
-- Closed-lid physical illumination and fresh Codex capture/input remain unproven in both modes.
-- Private virtual interfaces have no universal compatibility guarantee. Intel and macOS 13 execution remain untested.
-- Actual mouse/keyboard menu interaction, VoiceOver, long sessions, battery and thermal overrides, lock behavior, and capture-client recovery need human hardware testing.
-- No power settings, login registration, privileged helper, or unrelated application was changed by this verification.
-
-## Evidence retention
-
-The rename run is recorded under ignored `build/qa/insomac-rename-2026-11-14/`. Earlier logs and the private power-state attribution audit are preserved. Pre-rename QA notes are retained there separately; historical measurements and captured names were not rewritten as current InsoMac evidence.
-
-Only references to unrelated third-party projects retain the former name in the public text. Obsolete generated app, archive, slice, and preview artifacts were removed after the renamed build passed.
+Historical evidence and the private power-state attribution audit remain under ignored `build/qa/`. See [release preparation](RELEASE.md) for the candidate and signing workflow.
