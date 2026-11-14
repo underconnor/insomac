@@ -25,9 +25,9 @@ open build/InsoMac.app
 ./scripts/check.sh
 ```
 
-For headless verification, run `./scripts/check.sh --headless`. [Native CI passed on all four Apple Silicon and Intel macOS 15/26 runners](https://github.com/underconnor/insomac/actions/runs/43561932870), covering core logic, real IOKit assertion cleanup, native executable startup, and candidate packaging. Menu interaction and virtual-display graphics require separate checks.
+For headless verification, run `./scripts/check.sh --headless`. [Native CI passed on all four Apple Silicon and Intel macOS 15/26 runners](https://github.com/underconnor/insomac/actions/runs/43563820029), covering core logic, real IOKit assertion cleanup, native executable startup, and candidate packaging. Menu interaction and virtual-display graphics require separate checks.
 
-Targets macOS 13 and later, with `arm64` and `x86_64` builds. macOS 13 runtime testing and the updated app's local graphical retest remain pending. Private interfaces are checked at runtime and can be unavailable.
+Targets macOS 13 and later, with `arm64` and `x86_64` builds. Native menu toggles, mode changes, virtual activation, queued Off, and cleanup passed on the local Apple Silicon host. macOS 13 runtime testing remains pending. Private interfaces are checked at runtime and can be unavailable.
 
 The local app uses ad-hoc signing. It has no verified Developer ID signature or notarization and is not a public binary release.
 

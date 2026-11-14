@@ -40,7 +40,7 @@ The owner blocks on its control pipe while active; it has no polling or animatio
 
 AppKit screen-change notifications and child termination trigger session validation. Runtime loss stops assertions and display ownership and exposes an error. There is no fallback to Keep Screen On.
 
-The owner process addressed mode initialization in historical worker tests. Updated native-menu activation still needs verification. This design does not repair discovery in existing capture clients. A fresh observer's mode metadata is not evidence of fresh rendered frames, successful input, closed-lid survival, or physical illumination.
+The current worker tests and actual native-menu regression pass activation, independent mode readback, queued Off, and resource cleanup on the local host. This design does not repair discovery in existing capture clients. A fresh observer's mode metadata and native mouse-input success are not evidence of fresh captured frames, Codex Computer Use, closed-lid survival, or physical illumination.
 
 ## Build and review
 

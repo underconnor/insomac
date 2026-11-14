@@ -19,7 +19,7 @@ The packaged native executable also runs its rejected-parent startup path and mu
 
 The native CI matrix uses `macos-15` and `macos-26` for arm64, and `macos-15-intel` and `macos-26-intel` for x86_64. Xcode 16.4 and 26.6 are selected explicitly. Action revisions are pinned. Actual host, toolchain, test, and package evidence is uploaded per job. macOS 13 remains a separate runtime requirement.
 
-[Run 43561932870](https://github.com/underconnor/insomac/actions/runs/43561932870) passed all four jobs at `e6d0abe7d6efa1fe52c3eccc3be170397b419500`. See [QA](QA.md) for the actual patch versions and the remaining graphical coverage.
+[Run 43563820029](https://github.com/underconnor/insomac/actions/runs/43563820029) passed all four jobs at `5632b7ceb37bc593724dbb35a7d380916d72e195`, including CPU timebase regression checks. See [QA](QA.md) for the actual patch versions and graphical coverage.
 
 Runner labels and Xcode availability were checked against [GitHub's runner reference](https://docs.github.com/en/actions/reference/runners/github-hosted-runners) and the [official runner images](https://github.com/actions/runner-images). Runner image updates can change patch versions; the workflow records what ran.
 
