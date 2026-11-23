@@ -1,52 +1,60 @@
 # InsoMac QA
 
-Verified on 14 November 2026 for the [v0.1.0-preview.1 preview release](https://github.com/underconnor/insomac/releases/tag/v0.1.0-preview.1). Closed-lid built-in-panel illumination and fresh Codex capture/input remain unproven.
+The 24 November 2026 build 2 checks verified open-lid virtual display capture, targeted keyboard input, accessibility actions, and cleanup in the normal signed app. Raw mouse clicks to the test window did not register. Closed-lid operation, physical panel illumination with the lid closed, and actual Codex capture and input remain unverified. [v0.1.0-preview.2](https://github.com/underconnor/insomac/releases/tag/v0.1.0-preview.2)
 
 ## Distribution artifact
 
 | Item | Verified result |
 | --- | --- |
-| Package | `InsoMac-0.1.0-preview.1-universal.zip`, 152,546 bytes |
-| Bundle | `io.github.underconnor.insomac.prototype`, version `0.1.0`, build `1` |
+| Package | `InsoMac-0.1.0-preview.2-universal.zip`, 177,973 bytes |
+| Bundle | `io.github.underconnor.insomac.prototype`, version `0.1.0`, build `2` |
 | Architectures | Universal arm64 and x86_64 |
-| Minimum macOS | 13.0 in the plist and both Mach-O slices; bounded native/runtime/UI checks passed in an arm64 13.0 VM |
+| Minimum macOS | 13.0 in the plist and both Mach-O slices. The 13.0 VM checks used build 1. |
 | Signing | Exact Developer ID Application identity/team, hardened runtime, secure timestamp, empty entitlements |
 | Apple notarization | Accepted; status code zero, no issues |
 | Ticket and assessment | Stapled ticket validates; Gatekeeper reports `Notarized Developer ID` |
 | ZIP integrity | Checksum, extraction, executable permissions, signature, ticket, and Gatekeeper checks passed |
 
-ZIP SHA-256:
+ZIP SHA-256
 
 ```text
-3cb10a665d41fda07dd2068e7f1820473cf27251d3989ffe9c64056208378aae
+1a144647cd7299cc3c880ce9ccba762160098f90345df87a33e06b85612a7a97
 ```
 
-The app was compiled with Swift 6.4.2 and the macOS 27.2 SDK, then re-signed and packaged without recompilation. The manifest distinguishes the original build, the signed GUI-tested app, and the notarized export. Per-architecture comparison confirms matching code/data; signature allocation metadata is accounted for separately. Runtime policy and empty entitlements match the signed GUI-tested app. Later research-only commits are not represented as a rebuild.
+The app was compiled with Swift 6.4.2 and the macOS 27.2 SDK. The manifest records the source commit and notarized executable hash. Per-architecture comparison verified that the notarized export matches the compiled code and data after accounting for signature allocation metadata.
 
 ## Native CI
 
-[Main run 43564206723](https://github.com/underconnor/insomac/actions/runs/43564206723) passed all four jobs at code-reference commit `b54932f2018e0f976e37068d8e79dd983e11dda9`:
+[Build 2 run 45206379996](https://github.com/underconnor/insomac/actions/runs/45206379996) passed all four jobs at commit `207df43dd6bbac70cba1ec56cd225667d03a70df`.
 
-| Runner | Actual macOS | Native architecture | Xcode | Result |
-| --- | --- | --- | --- | --- |
-| `macos-15` | 15.8.2 | arm64 | 16.4 | Passed |
-| `macos-15-intel` | 15.7.9 | x86_64 | 16.4 | Passed |
-| `macos-26` | 26.7.2 | arm64 | 26.6 | Passed |
-| `macos-26-intel` | 26.6.1 | x86_64 | 26.6 | Passed |
+| macOS runners | Architectures | Xcode | Result |
+| --- | --- | --- | --- |
+| 15 | arm64 and x86_64 | 16.4 | Passed |
+| 26 | arm64 and x86_64 | 26.6 | Passed |
 
 Each job built both slices and checked bundle identity, permissions, deployment metadata, and its ad-hoc build signature. It executed the native rejected-parent startup path, which exits before graphics, assertions, or display creation. This establishes native loading/startup on those hosts, not menu or private-display compatibility.
 
-The suite passed 22 session cases, six serialized-coordinator cases, two bounded process-I/O cases, and display-policy checks. It also verified real IOKit assertion acquisition/release, normal/abrupt-exit cleanup, blocked-worker parent monitoring, three immutable-input packaging regressions, and Mach CPU-time scaling against independent `getrusage`. Profiler compilation, preview packaging, extracted-bundle checks, and rejection of missing notarization credentials passed on every runner.
+The suite passed 22 session cases, ten coordinator cases, bounded process I/O, display policy, and real IOKit assertion cleanup. The new cases simulate transient recovery with the same owner and assertions, cleanup after persistent or terminal failure, and retry cancellation on Off or Quit. Packaging and extracted-bundle checks also passed.
 
-## macOS 13 validation
+## Build 2 open-lid virtual desktop
+
+On Apple Silicon macOS 27.2.1, the normal signed and notarized app started Off. The test selected **Virtual Display (Experimental)** and used **Turn On**. The app owned an active 1280 × 720 secondary display and two idle-sleep assertions while On.
+
+- A display-filtered ScreenCaptureKit live stream and screenshots of the exact test window showed the expected changing marker on all four samples. Display screenshots also included the fixture marker.
+- The test window received targeted key events and an accessibility button press on all four samples. It did not receive the posted raw mouse clicks. The menu bar right-click worked separately.
+- **Turn Off** restored the original display topology and released both assertions. After **Quit InsoMac**, the audit found no owned assertions or processes.
+
+The lid remained open and macOS reported the built-in display active and awake. The test used a private fixture window and standalone capture and input tools. No Codex session or closed-lid capture was exercised. Evidence is retained locally at `build/qa/virtual-desktop-2026-11-24/normal-open-20261123T153604Z.jsonl`.
+
+## Earlier macOS 13 validation (build 1)
 
 A genuine macOS Ventura 13.0 (`22A380`) arm64 virtual machine passed the separate baseline: all 13 original artifact hashes matched, the original app's rejected-parent startup exited with status 2, and all eight native suites exited zero. This covers native loading and the core/IOKit/process/policy/timebase suites.
 
-The final V3 check verified the exact release ZIP and executable hashes, bundle metadata, all-architecture Developer ID signature, team/identifier/runtime, native rejected-parent exit 2, and offline Gatekeeper acceptance as `Notarized Developer ID`. All mandatory checks passed and the runner exited zero. Guest stapler was explicitly unavailable because only a developer-tool shim was present; no toolchain was installed and no guest stapler pass is claimed. The host had already validated the exact package's stapled ticket. Earlier runner/tool-availability failures remain in the private evidence.
+The final V3 check verified the exact preview.1 ZIP and executable hashes, bundle metadata, all-architecture Developer ID signature, team/identifier/runtime, native rejected-parent exit 2, and offline Gatekeeper acceptance as `Notarized Developer ID`. All mandatory checks passed. Guest stapler was unavailable. The host verified the stapled ticket. Build 2 has no macOS 13 runtime result.
 
 A separate normal AppKit smoke of the final candidate showed the moon/Off status icon, Keep Screen On selected, menu Off → On through Turn On, and removal of the menu/status icon after Quit while On. This is visual/native-input evidence. It is not an independent guest assertion-inventory audit, a private virtual-display test, physical hardware testing, or a lid/panel test.
 
-## Signed native GUI and cleanup
+## Earlier signed native GUI and cleanup (build 1)
 
 An isolated Developer ID signed copy passed actual native AX/CGEvent interaction on Apple Silicon macOS 27.2.1:
 
@@ -59,13 +67,13 @@ An isolated Developer ID signed copy passed actual native AX/CGEvent interaction
 
 The physical display's mode, main status, and mirroring were preserved. Final topology and pointer matched their starting state, with no owned assertion or process remaining. The signed run captured no screenshots. Earlier native-menu crops and the current light/dark rendered illustrations were visually checked for legibility; illustrations omit busy states and are not screenshots.
 
-The current worker suite separately passed explicit stop, abrupt controlling-process exit, and abrupt owner exit. Each restored the starting topology; owner loss produced Error without retained resources. Graphical lifecycle checks passed accessory identity, launch Off, and normal AppKit termination.
+The worker suite separately passed explicit stop, abrupt controlling-process exit, and abrupt owner exit. Each restored the starting topology. Owner loss produced Error without retained resources. Graphical lifecycle checks passed accessory identity, launch Off, and normal AppKit termination.
 
 A long-lived observer can still see an active display ID while `CGDisplayCopyDisplayMode` returns no mode. Fresh-observer metadata and native mouse-input success do not establish capture-client discovery, fresh captured frames, Codex Computer Use, or physical illumination.
 
 ## Bounded resource sample
 
-A 60.004-second pre-signing off-state sample recorded 31 observations after a five-second settling period. No project assertion appeared, cleanup completed, and both read-only memory diagnostics succeeded. The final notarized package was not re-profiled.
+A 60.004-second build 1 pre-signing off-state sample recorded 31 observations after a five-second settling period. No project assertion appeared, cleanup completed, and both read-only memory diagnostics succeeded. Build 2 has no equivalent resource sample.
 
 | Measurement | Observation |
 | --- | --- |

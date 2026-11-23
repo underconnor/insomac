@@ -1,8 +1,8 @@
 # Release preparation
 
-The packaging workflow produces candidates, not a claim that closed-lid physical illumination or computer use works. Those product requirements remain unverified. Signing and notarization do not establish them.
+The current preview ZIP is Developer ID signed, notarized, stapled, and accepted by Gatekeeper after extraction. Build 2 passed open-lid virtual display capture, targeted keys, and accessibility button actions in a fixture window. Raw mouse clicks to the fixture did not register. Closed-lid operation, physical-panel illumination with the lid closed, and actual Codex capture and input remain unverified. [Download v0.1.0-preview.2](https://github.com/underconnor/insomac/releases/tag/v0.1.0-preview.2) · [QA results and checksum](QA.md)
 
-The [v0.1.0-preview.1 preview release](https://github.com/underconnor/insomac/releases/tag/v0.1.0-preview.1) is Developer ID signed, notarized, stapled, and accepted by Gatekeeper, including after extraction. Its code and data match the reviewed application. The exact ZIP passed the bounded macOS 13 checks and basic native-menu smoke described in [QA](QA.md), which also records the checksum and remaining coverage.
+To use the virtual display, right-click or Control-click the menu bar icon, select **Virtual Display (Experimental)**, and choose **Turn On**. When the app shows On, move a window onto the new display. Choose **Turn Off** when finished.
 
 ## Native checks
 
@@ -21,9 +21,9 @@ The packaged native executable also runs its rejected-parent startup path and mu
 
 The native CI matrix uses `macos-15` and `macos-26` for arm64, and `macos-15-intel` and `macos-26-intel` for x86_64. Xcode 16.4 and 26.6 are selected explicitly. Action revisions are pinned. Actual host, toolchain, test, and package evidence is uploaded per job. macOS 13 remains a separate runtime requirement.
 
-The macOS 13.0 arm64 VM baseline passed native rejected-parent startup and all eight native suites. The exact notarized ZIP then passed metadata/signature/hash checks, native startup, and offline Gatekeeper; a separate normal AppKit smoke showed menu Off → On and Quit removing the status item. Guest stapler was unavailable; host ticket validation passed. These results do not establish private-display behavior, physical hardware or lid/panel behavior, or an independent guest assertion-inventory audit.
+The earlier macOS 13.0 arm64 VM checks used preview.1 (build 1). They covered native startup, eight native suites, offline Gatekeeper, and a basic AppKit menu smoke. Build 2 targets 13.0, with runtime verification from the macOS 15/26 CI matrix and the macOS 27.2.1 open-lid host checks.
 
-[Run 43564206723](https://github.com/underconnor/insomac/actions/runs/43564206723) passed all four jobs on main at `b54932f2018e0f976e37068d8e79dd983e11dda9`, including CPU timebase regression checks. See [QA](QA.md) for the actual patch versions and graphical coverage.
+Build 2 passed all four jobs at `207df43dd6bbac70cba1ec56cd225667d03a70df`, including the bounded topology recovery and cleanup regressions. [Build 2 CI](https://github.com/underconnor/insomac/actions/runs/45206379996)
 
 Runner labels and Xcode availability were checked against [GitHub's runner reference](https://docs.github.com/en/actions/reference/runners/github-hosted-runners) and the [official runner images](https://github.com/actions/runner-images). Runner image updates can change patch versions; the workflow records what ran.
 
