@@ -5,6 +5,7 @@
 
 static const NSUInteger InsoMacWidth = 1280;
 static const NSUInteger InsoMacHeight = 720;
+NSErrorDomain const InsoMacVirtualDisplayErrorDomain = @"io.github.underconnor.insomac.virtual-display";
 
 BOOL InsoMacVirtualDisplayLayoutIsUsable(InsoMacVirtualDisplayLayout layout, BOOL requiresSecondaryDisplay) {
     return layout.online && layout.active && !layout.asleep && !layout.builtIn && !layout.mirrored
@@ -20,10 +21,14 @@ BOOL InsoMacVirtualDisplayLayoutIsUsable(InsoMacVirtualDisplayLayout layout, BOO
 - (instancetype)initWithWidth:(unsigned int)width height:(unsigned int)height refreshRate:(CGFloat)rate;
 @end
 
-static BOOL InsoMacFail(NSError **error, NSString *message) {
-    if (error) *error = [NSError errorWithDomain:@"io.github.underconnor.insomac.virtual-display" code:1
+static BOOL InsoMacDisplayFail(NSError **error, InsoMacVirtualDisplayError code, NSString *message) {
+    if (error) *error = [NSError errorWithDomain:InsoMacVirtualDisplayErrorDomain code:code
                                        userInfo:@{NSLocalizedDescriptionKey: message}];
     return NO;
+}
+
+static BOOL InsoMacFail(NSError **error, NSString *message) {
+    return InsoMacDisplayFail(error, InsoMacVirtualDisplayErrorFailed, message);
 }
 
 static BOOL InsoMacSignature(Class cls, NSString *name, const char *result, NSArray<NSString *> *arguments) {
@@ -130,6 +135,9 @@ static NSSet<NSNumber *> *InsoMacOnlineIDs(void) {
 }
 
 - (BOOL)validateRequiringSecondaryDisplay:(BOOL)requiresSecondaryDisplay error:(NSError **)error {
+    if (!_display || !_displayID) {
+        return InsoMacFail(error, @"The virtual display owner has no display. Turn off and try again.");
+    }
     CGRect bounds = CGDisplayBounds(_displayID);
     InsoMacVirtualDisplayLayout layout = {
         .online = CGDisplayIsOnline(_displayID), .active = CGDisplayIsActive(_displayID),
@@ -137,14 +145,19 @@ static NSSet<NSNumber *> *InsoMacOnlineIDs(void) {
         .main = CGDisplayIsMain(_displayID), .mirrored = CGDisplayMirrorsDisplay(_displayID) != kCGNullDirectDisplay,
         .width = bounds.size.width, .height = bounds.size.height
     };
-    if (!_display || !_displayID || !InsoMacVirtualDisplayLayoutIsUsable(layout, requiresSecondaryDisplay)) {
-        return InsoMacFail(error, @"The virtual display is unavailable or its layout changed. Turn off and try again.");
+    if (layout.builtIn) {
+        return InsoMacFail(error, @"Virtual display ownership could not be verified. Turn off and try again.");
+    }
+    if (!InsoMacVirtualDisplayLayoutIsUsable(layout, requiresSecondaryDisplay)) {
+        return InsoMacDisplayFail(error, InsoMacVirtualDisplayErrorTopologyUnavailable,
+                                  @"The virtual display is unavailable or its layout changed. Turn off and try again.");
     }
     CGDisplayModeRef mode = CGDisplayCopyDisplayMode(_displayID);
     BOOL valid = mode && CGDisplayModeGetWidth(mode) == InsoMacWidth && CGDisplayModeGetHeight(mode) == InsoMacHeight
         && CGDisplayModeGetPixelWidth(mode) == InsoMacWidth && CGDisplayModeGetPixelHeight(mode) == InsoMacHeight;
     if (mode) CGDisplayModeRelease(mode);
-    return valid ? YES : InsoMacFail(error, @"Virtual display resolution readback failed. Turn off and try again.");
+    return valid ? YES : InsoMacDisplayFail(error, InsoMacVirtualDisplayErrorTopologyUnavailable,
+                                            @"Virtual display resolution readback failed. Turn off and try again.");
 }
 
 - (BOOL)stopWithError:(NSError **)error {

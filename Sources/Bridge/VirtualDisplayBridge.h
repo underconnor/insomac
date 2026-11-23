@@ -3,6 +3,12 @@
 
 NS_ASSUME_NONNULL_BEGIN
 
+FOUNDATION_EXPORT NSErrorDomain const InsoMacVirtualDisplayErrorDomain;
+typedef NS_ERROR_ENUM(InsoMacVirtualDisplayErrorDomain, InsoMacVirtualDisplayError) {
+    InsoMacVirtualDisplayErrorFailed = 1,
+    InsoMacVirtualDisplayErrorTopologyUnavailable = 2,
+};
+
 typedef struct {
     bool online;
     bool active;

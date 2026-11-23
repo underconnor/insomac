@@ -125,13 +125,17 @@ final class KeepAwakeSession {
         state = hasResources || !errorMessages.isEmpty ? .error : .off
     }
 
-    func validateResources() {
-        guard state == .on, mode == .virtualDisplay, let virtualDisplay else { return }
-        if case .failure(let failure) = virtualDisplay.validate() {
-            displayFailures = [failure]
-            releaseAll()
-            state = .error
-        }
+    // Returns true when the currently owned display should be checked again.
+    @discardableResult
+    func validateResources(retryUntil deadline: DispatchTime? = nil) -> Bool {
+        guard state == .on, mode == .virtualDisplay, let virtualDisplay,
+              case .failure(let failure) = virtualDisplay.validate() else { return false }
+        if failure.canRetryTopology, let deadline, DispatchTime.now() < deadline { return true }
+
+        displayFailures = [failure]
+        releaseAll()
+        state = .error
+        return false
     }
 
     private func releaseAll() {

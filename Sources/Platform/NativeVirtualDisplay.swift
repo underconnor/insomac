@@ -71,7 +71,7 @@ final class NativeVirtualDisplay: VirtualDisplayBackend {
     }
 
     private func validate(requiresSecondaryDisplay: Bool) -> Result<Void, VirtualDisplayFailure> {
-        guard process?.isRunning == true, let id = ownedID else {
+        guard let child = process, child.isRunning, let id = ownedID, let input else {
             return failure("The virtual display owner or display is unavailable. Turn off and try again.")
         }
         let readback = layout(for: id)
@@ -79,16 +79,23 @@ final class NativeVirtualDisplay: VirtualDisplayBackend {
             let detail = "initial=\(requiresSecondaryDisplay) online=\(readback.online) active=\(readback.active) "
                 + "asleep=\(readback.asleep) builtIn=\(readback.builtIn) main=\(readback.main) "
                 + "mirrored=\(readback.mirrored) width=\(readback.width) height=\(readback.height)"
-            logger.error("Owned virtual-display layout rejected: \(detail, privacy: .public)")
-            return failure("The virtual display owner or display is unavailable. Turn off and try again.")
+            logger.debug("Owned virtual-display layout not usable: \(detail, privacy: .public)")
+            return failure("The virtual display owner or display is unavailable. Turn off and try again.",
+                           canRetryTopology: !requiresSecondaryDisplay && !readback.builtIn && child.isRunning)
         }
         do {
-            try input?.fileHandleForWriting.write(contentsOf: Data([0x76]))
+            try input.fileHandleForWriting.write(contentsOf: Data([0x76]))
             let response = try readResponse(timeout: 2_000)
-            guard response["ok"] as? Bool == true,
-                  (response["display_id"] as? NSNumber)?.uint32Value == id,
-                  response["width"] as? Int == 1280, response["height"] as? Int == 720 else {
-                return failure(response["error"] as? String ?? "Virtual display mode readback failed. Turn off and try again.")
+            guard child.isRunning, (response["display_id"] as? NSNumber)?.uint32Value == id,
+                  let ok = response["ok"] as? Bool else {
+                return failure("The virtual display owner did not confirm ownership. Turn off and try again.")
+            }
+            if !ok {
+                return failure(response["error"] as? String ?? "Virtual display mode readback failed. Turn off and try again.",
+                               canRetryTopology: !requiresSecondaryDisplay && response["topology_unavailable"] as? Bool == true)
+            }
+            guard response["width"] as? Int == 1280, response["height"] as? Int == 720 else {
+                return failure("The virtual display owner reported an invalid mode. Turn off and try again.")
             }
             return .success(())
         } catch {
@@ -159,8 +166,8 @@ final class NativeVirtualDisplay: VirtualDisplayBackend {
         return baselineIDs.map { current.isSubset(of: $0) } ?? true
     }
 
-    private func failure(_ message: String) -> Result<Void, VirtualDisplayFailure> {
-        .failure(VirtualDisplayFailure(description: message))
+    private func failure(_ message: String, canRetryTopology: Bool = false) -> Result<Void, VirtualDisplayFailure> {
+        .failure(VirtualDisplayFailure(description: message, canRetryTopology: canRetryTopology))
     }
 
     deinit {

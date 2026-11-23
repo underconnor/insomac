@@ -48,14 +48,18 @@ private final class SlowCoordinatorDisplay: VirtualDisplayBackend {
     let trace: CoordinatorTrace
     let startDelay: TimeInterval
     let failStart: Bool
+    let validationFailure: (Int) -> VirtualDisplayFailure?
+    private var validationCount = 0
     var hasResources = false
     var unavailabilityReason: String? { nil }
     var displayID: UInt32? { hasResources ? 42 : nil }
 
-    init(trace: CoordinatorTrace, startDelay: TimeInterval, failStart: Bool) {
+    init(trace: CoordinatorTrace, startDelay: TimeInterval, failStart: Bool,
+         validationFailure: @escaping (Int) -> VirtualDisplayFailure?) {
         self.trace = trace
         self.startDelay = startDelay
         self.failStart = failStart
+        self.validationFailure = validationFailure
     }
 
     func start() -> Result<Void, VirtualDisplayFailure> {
@@ -66,6 +70,8 @@ private final class SlowCoordinatorDisplay: VirtualDisplayBackend {
 
     func validate() -> Result<Void, VirtualDisplayFailure> {
         trace.record("display.validate", delay: 0.02)
+        validationCount += 1
+        if let failure = validationFailure(validationCount) { return .failure(failure) }
         return .success(())
     }
 
@@ -79,20 +85,31 @@ private final class SlowCoordinatorDisplay: VirtualDisplayBackend {
 @main
 @MainActor
 struct SessionCoordinatorTests {
+    nonisolated private static let transient = VirtualDisplayFailure(description: "Display metadata is temporarily unavailable.",
+                                                                     canRetryTopology: true)
+
     static func main() async throws {
         try await testResponsiveQueuedStop()
         try await testFailedStartDoesNotTurnOffIntoRetry()
         try await testOrderedModeChanges()
         try await testValidationCoalescing()
+        try await testTransientValidationRecovers()
+        try await testPersistentValidationEndsDespiteNotifications()
+        try await testTerminalValidationDoesNotRetry()
+        try await testCleanupCancelsDelayedValidation()
         try await testQuitDuringActivation()
         try await testQuitDeadline()
     }
 
     private static func makeCoordinator(trace: CoordinatorTrace, delay: TimeInterval = 0.25,
-                                        failStart: Bool = false, quitTimeout: TimeInterval = 2) -> SessionCoordinator {
-        SessionCoordinator(terminationTimeout: quitTimeout) {
+                                        failStart: Bool = false, quitTimeout: TimeInterval = 2,
+                                        validationGracePeriod: TimeInterval = 2,
+                                        validationFailure: @escaping @Sendable (Int) -> VirtualDisplayFailure? = { _ in nil }
+    ) -> SessionCoordinator {
+        SessionCoordinator(terminationTimeout: quitTimeout, validationGracePeriod: validationGracePeriod) {
             KeepAwakeSession(backend: CoordinatorAssertions(trace: trace),
-                virtualDisplay: SlowCoordinatorDisplay(trace: trace, startDelay: delay, failStart: failStart))
+                virtualDisplay: SlowCoordinatorDisplay(trace: trace, startDelay: delay, failStart: failStart,
+                                                       validationFailure: validationFailure))
         }
     }
 
@@ -172,6 +189,115 @@ struct SessionCoordinatorTests {
         try check(extra > 0 && extra <= 2, "A notification flood must create at most one in-flight and one pending validation.")
         try await quit(coordinator)
         print("PASS: notification floods coalesce without concurrent validation")
+    }
+
+    private static func testTransientValidationRecovers() async throws {
+        let trace = CoordinatorTrace()
+        let coordinator = makeCoordinator(trace: trace, delay: 0) { count in
+            count == 2 ? transient : nil
+        }
+        try await readyVirtual(coordinator)
+        coordinator.toggle()
+        try await waitUntil { !coordinator.snapshot.isBusy }
+        var checkingUpdates = 0
+        coordinator.onChange = { snapshot in
+            if snapshot.activity == .validating { checkingUpdates += 1 }
+        }
+        coordinator.validateResources()
+        try await waitUntil { checkingUpdates >= 2 }
+        try check(coordinator.snapshot.activity == .validating && coordinator.snapshot.hasResources
+            && coordinator.snapshot.errorMessages.isEmpty, "Keep resources and show Checking while waiting for topology.")
+        for _ in 0..<200 { coordinator.validateResources() }
+        try await waitUntil { !coordinator.snapshot.isBusy }
+        try check(coordinator.snapshot.state == .on && coordinator.snapshot.hasResources
+            && coordinator.snapshot.errorMessages.isEmpty, "A successful retry must return to On.")
+        let events = trace.events
+        try check(events.filter { $0 == "display.validate" }.count == 3
+            && events.filter { $0 == "display.start" }.count == 1
+            && !events.contains { $0 == "display.stop" || $0.hasPrefix("release.") },
+            "Recovery must keep the original owner and assertions, with one retry for the notification burst.")
+        try check(trace.remainedSerialAndOffMain, "Every topology check must stay on the serial background executor.")
+        try await quit(coordinator)
+        print("PASS: transient topology recovers with the original owner and assertions")
+    }
+
+    private static func testPersistentValidationEndsDespiteNotifications() async throws {
+        let trace = CoordinatorTrace()
+        let coordinator = makeCoordinator(trace: trace, delay: 0, validationGracePeriod: 0.25) { count in
+            count > 1 ? transient : nil
+        }
+        try await readyVirtual(coordinator)
+        coordinator.toggle()
+        try await waitUntil { !coordinator.snapshot.isBusy }
+        coordinator.validateResources()
+        let timeout = ProcessInfo.processInfo.systemUptime + 1.5
+        while coordinator.snapshot.isBusy {
+            try check(ProcessInfo.processInfo.systemUptime < timeout, "New notifications must not extend the retry deadline.")
+            coordinator.validateResources()
+            try await Task.sleep(nanoseconds: 5_000_000)
+        }
+        try check(coordinator.snapshot.state == .error && !coordinator.snapshot.hasResources
+            && coordinator.snapshot.errorMessages == [transient.description], "Expired recovery must expose the error and clean up.")
+        try check(trace.events.filter { $0 == "display.validate" }.count >= 3
+            && trace.events.filter { $0 == "display.stop" }.count == 1
+            && trace.events.filter { $0.hasPrefix("release.") }.count == 2,
+            "Persistent loss must retry before releasing the owned resources once.")
+        try await quit(coordinator)
+        print("PASS: persistent topology loss runs one bounded window and cleans up despite new notifications")
+    }
+
+    private static func testTerminalValidationDoesNotRetry() async throws {
+        let trace = CoordinatorTrace()
+        let ownerLost = VirtualDisplayFailure(description: "Owner exited.")
+        let coordinator = makeCoordinator(trace: trace, delay: 0) { count in
+            count > 1 ? ownerLost : nil
+        }
+        try await readyVirtual(coordinator)
+        coordinator.toggle()
+        try await waitUntil { !coordinator.snapshot.isBusy }
+        coordinator.validateResources()
+        try await waitUntil { !coordinator.snapshot.isBusy }
+        try check(coordinator.snapshot.state == .error && !coordinator.snapshot.hasResources
+            && coordinator.snapshot.errorMessages == [ownerLost.description], "Owner loss must proceed directly to cleanup.")
+        try check(trace.events.filter { $0 == "display.validate" }.count == 2, "Terminal failures must not retry.")
+        try await quit(coordinator)
+        print("PASS: terminal validation failures bypass the topology retry window")
+    }
+
+    private static func testCleanupCancelsDelayedValidation() async throws {
+        for quitDuringRetry in [false, true] {
+            let trace = CoordinatorTrace()
+            let coordinator = makeCoordinator(trace: trace, delay: 0) { count in
+                count == 2 ? transient : nil
+            }
+            try await readyVirtual(coordinator)
+            coordinator.toggle()
+            try await waitUntil { !coordinator.snapshot.isBusy }
+            var checkingUpdates = 0
+            coordinator.onChange = { snapshot in
+                if snapshot.activity == .validating { checkingUpdates += 1 }
+            }
+            coordinator.validateResources()
+            try await waitUntil { checkingUpdates >= 2 }
+            if quitDuringRetry {
+                try await quit(coordinator)
+            } else {
+                coordinator.toggle()
+                try await waitUntil { !coordinator.snapshot.isBusy }
+            }
+            try check(coordinator.snapshot.state == .off && !coordinator.snapshot.hasResources,
+                      "Off or Quit must clean up without waiting on the topology grace period.")
+            if !quitDuringRetry {
+                coordinator.toggle()
+                try await waitUntil { !coordinator.snapshot.isBusy && coordinator.snapshot.state == .on }
+            }
+            try await Task.sleep(nanoseconds: 160_000_000)
+            try check(trace.events.filter { $0 == "display.validate" }.count == (quitDuringRetry ? 2 : 3)
+                && trace.events.filter { $0 == "display.stop" }.count == 1,
+                "A cancelled retry must not run again after cleanup or check a later session.")
+            if !quitDuringRetry { try await quit(coordinator) }
+        }
+        print("PASS: Off and Quit cancel scheduled revalidation and clean up once")
     }
 
     private static func testQuitDuringActivation() async throws {

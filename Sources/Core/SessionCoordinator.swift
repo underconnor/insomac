@@ -60,7 +60,7 @@ enum SessionTerminationResult: Sendable {
 }
 
 private enum SessionRequest: Sendable {
-    case initialize, start, stop, selectMode(KeepAwakeMode), validate, quit
+    case initialize, start, stop, selectMode(KeepAwakeMode), validate(retryUntil: DispatchTime), quit
 
     var activity: SessionActivity {
         switch self {
@@ -89,21 +89,22 @@ private final class SessionExecutor: Sendable {
         self.makeSession = makeSession
     }
 
-    func perform(_ request: SessionRequest, completion: @escaping @Sendable (SessionSnapshot) -> Void) {
+    func perform(_ request: SessionRequest, completion: @escaping @Sendable (SessionSnapshot, Bool) -> Void) {
         queue.async { [storage, makeSession] in
             if storage.session == nil { storage.session = makeSession() }
             guard let session = storage.session else { return }
+            var retryValidation = false
             switch request {
             case .initialize: break
             case .start: session.start()
             case .stop: session.stop()
             case .selectMode(let mode): session.selectMode(mode)
-            case .validate: session.validateResources()
+            case .validate(let deadline): retryValidation = session.validateResources(retryUntil: deadline)
             case .quit: session.stop()
             }
             let snapshot = SessionSnapshot(session: session)
             if case .quit = request { storage.session = nil }
-            completion(snapshot)
+            completion(snapshot, retryValidation)
         }
     }
 
@@ -116,9 +117,12 @@ private final class SessionExecutor: Sendable {
 final class SessionCoordinator {
     private let executor: SessionExecutor
     private let terminationTimeout: TimeInterval
+    private let validationGracePeriod: TimeInterval
     private var requests: [SessionRequest] = [.initialize]
     private var inFlight: SessionRequest?
     private var validationPending = false
+    private var validationDeadline: DispatchTime?
+    private var validationRetry: Task<Void, Never>?
     private var requestedOn = false
     private var quitCompletion: (@MainActor (SessionTerminationResult) -> Void)?
     private var quitReplyDelivered = false
@@ -127,9 +131,10 @@ final class SessionCoordinator {
     private(set) var isQuitting = false
     var onChange: (@MainActor (SessionSnapshot) -> Void)?
 
-    init(terminationTimeout: TimeInterval = 15,
+    init(terminationTimeout: TimeInterval = 15, validationGracePeriod: TimeInterval = 2,
          makeSession: @escaping @Sendable () -> KeepAwakeSession) {
         self.terminationTimeout = terminationTimeout
+        self.validationGracePeriod = validationGracePeriod
         executor = SessionExecutor(makeSession: makeSession)
         startNextRequest()
     }
@@ -159,7 +164,8 @@ final class SessionCoordinator {
     }
 
     func validateResources() {
-        guard !isQuitting else { return }
+        // A scheduled retry already covers changes that arrive before it starts.
+        guard !isQuitting, validationRetry == nil else { return }
         guard inFlight != nil || (snapshot.state == .on && snapshot.mode == .virtualDisplay) else { return }
         validationPending = true
         startNextRequest()
@@ -169,7 +175,7 @@ final class SessionCoordinator {
         guard !isQuitting else { return }
         isQuitting = true
         requestedOn = false
-        validationPending = false
+        cancelValidation()
         // Quit supersedes work that has not started, but follows any active
         // operation so its cleanup cannot race a display that is still starting.
         requests = [.quit]
@@ -182,6 +188,7 @@ final class SessionCoordinator {
     }
 
     private func enqueue(_ request: SessionRequest) {
+        cancelValidation()
         requests.append(request)
         publish(snapshot.presenting(inFlight?.activity ?? request.activity,
                                     requestedOn: requestedOn, clearErrors: true))
@@ -189,36 +196,70 @@ final class SessionCoordinator {
     }
 
     private func startNextRequest() {
-        guard inFlight == nil else { return }
+        guard inFlight == nil, validationRetry == nil else { return }
         let request: SessionRequest
         if !requests.isEmpty {
             request = requests.removeFirst()
-        } else if validationPending {
+        } else if validationPending && snapshot.state == .on && snapshot.mode == .virtualDisplay {
             validationPending = false
-            request = .validate
+            let deadline = validationDeadline ?? (.now() + validationGracePeriod)
+            validationDeadline = deadline
+            request = .validate(retryUntil: deadline)
         } else {
+            validationPending = false
             requestedOn = snapshot.hasResources
             publish(snapshot.presenting(nil, requestedOn: requestedOn))
             return
         }
         inFlight = request
         publish(snapshot.presenting(isQuitting ? .quitting : request.activity, requestedOn: requestedOn))
-        executor.perform(request) { [weak self] result in
+        executor.perform(request) { [weak self] result, retryValidation in
             DispatchQueue.main.async {
-                self?.completed(request, snapshot: result)
+                self?.completed(request, snapshot: result, retryValidation: retryValidation)
             }
         }
     }
 
-    private func completed(_ request: SessionRequest, snapshot result: SessionSnapshot) {
+    private func completed(_ request: SessionRequest, snapshot result: SessionSnapshot, retryValidation: Bool) {
         snapshot = result
         inFlight = nil
+        if case .validate = request {
+            if retryValidation, let deadline = validationDeadline {
+                scheduleValidationRetry(until: deadline)
+                return
+            }
+            validationDeadline = nil
+        }
         if case .quit = request {
             publish(result)
             replyToQuit(.completed(result))
         } else {
             startNextRequest()
         }
+    }
+
+    private func scheduleValidationRetry(until deadline: DispatchTime) {
+        validationPending = false
+        let now = DispatchTime.now().uptimeNanoseconds
+        let remaining = deadline.uptimeNanoseconds - min(now, deadline.uptimeNanoseconds)
+        let delay = min(100_000_000, remaining)
+        // Keep the busy state visible during the delay and leave the executor free
+        // for cleanup if the user requests Off, a mode change, or Quit.
+        validationRetry = Task { [weak self] in
+            try? await Task.sleep(nanoseconds: delay)
+            guard !Task.isCancelled, let self else { return }
+            self.validationRetry = nil
+            self.validationPending = true
+            self.startNextRequest()
+        }
+        publish(snapshot.presenting(.validating, requestedOn: requestedOn))
+    }
+
+    private func cancelValidation() {
+        validationRetry?.cancel()
+        validationRetry = nil
+        validationDeadline = nil
+        validationPending = false
     }
 
     private func replyToQuit(_ result: SessionTerminationResult) {

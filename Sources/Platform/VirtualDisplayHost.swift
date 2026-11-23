@@ -23,12 +23,16 @@ enum VirtualDisplayHost {
                     return true
                 }
                 if command == 0x76 {
+                    var response: [String: Any]
                     do {
                         try owner.validate()
-                        try emit(["ok": true, "display_id": owner.displayID, "width": 1280, "height": 720])
+                        response = ["ok": true, "display_id": owner.displayID, "width": 1280, "height": 720]
                     } catch {
-                        try emit(["ok": false, "error": error.localizedDescription])
+                        let topologyUnavailable = (error as? InsoMacVirtualDisplayError)?.code == .topologyUnavailable
+                        response = ["ok": false, "display_id": owner.displayID,
+                                    "topology_unavailable": topologyUnavailable, "error": error.localizedDescription]
                     }
+                    try emit(response)
                 }
             }
         } catch {

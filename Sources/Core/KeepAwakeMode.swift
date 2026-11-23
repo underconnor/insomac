@@ -12,6 +12,12 @@ enum KeepAwakeMode: String, CaseIterable, Sendable {
 
 struct VirtualDisplayFailure: Error, Equatable, CustomStringConvertible {
     let description: String
+    let canRetryTopology: Bool
+
+    init(description: String, canRetryTopology: Bool = false) {
+        self.description = description
+        self.canRetryTopology = canRetryTopology
+    }
 }
 
 protocol VirtualDisplayBackend: AnyObject {

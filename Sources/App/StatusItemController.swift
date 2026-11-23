@@ -61,6 +61,8 @@ final class StatusItemController: NSObject, NSMenuDelegate {
                                                name: NSApplication.didChangeScreenParametersNotification, object: nil)
         NotificationCenter.default.addObserver(self, selector: #selector(displaysChanged(_:)),
                                                name: .virtualDisplayOwnerDidExit, object: nil)
+        NSWorkspace.shared.notificationCenter.addObserver(self, selector: #selector(workspaceDidWake(_:)),
+                                                           name: NSWorkspace.didWakeNotification, object: NSWorkspace.shared)
         coordinator.onChange = { [weak self] _ in self?.refresh() }
         refresh()
     }
@@ -73,6 +75,10 @@ final class StatusItemController: NSObject, NSMenuDelegate {
     @objc private func displaysChanged(_ notification: Notification) {
         coordinator.validateResources()
         refresh()
+    }
+
+    @objc nonisolated private func workspaceDidWake(_ notification: Notification) {
+        DispatchQueue.main.async { [weak self] in self?.coordinator.validateResources() }
     }
 
     @objc private func selectMode(_ sender: NSMenuItem) {
