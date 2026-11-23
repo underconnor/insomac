@@ -13,7 +13,7 @@ To start a virtual desktop, keep the lid open and right-click or Control-click t
 
 InsoMac runs without accounts, analytics, network calls, or a privileged helper.
 
-On Apple Silicon macOS 27.2.1 with the lid open, build 2 showed four changing samples in a live ScreenCaptureKit stream and in window screenshots. The test window received targeted keys and an accessibility button press. Raw mouse clicks to that window did not register. **Closed-lid operation, built-in-panel illumination with the lid closed, and actual Codex capture and input remain unverified.** [QA results](docs/QA.md)
+On Apple Silicon macOS 27.2.1 with the lid open, build 2 showed four changing samples in a live ScreenCaptureKit stream and in window screenshots. The test window received targeted keys and accessibility button presses on all four samples. Window-targeted mouse clicks landed twice in two attempts. The earlier global-coordinate Core Graphics method missed both attempts in the same run. **Closed-lid operation, built-in-panel illumination with the lid closed, and actual Codex capture and input remain unverified.** [QA results](docs/QA.md)
 
 Rendered illustration of the resting states and mode menu. Busy states are omitted; this is not a desktop screenshot:
 

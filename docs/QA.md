@@ -1,6 +1,6 @@
 # InsoMac QA
 
-The 24 November 2026 build 2 checks verified open-lid virtual display capture, targeted keyboard input, accessibility actions, and cleanup in the normal signed app. Raw mouse clicks to the test window did not register. Closed-lid operation, physical panel illumination with the lid closed, and actual Codex capture and input remain unverified. [v0.1.0-preview.2](https://github.com/underconnor/insomac/releases/tag/v0.1.0-preview.2)
+The 24 November 2026 build 2 checks verified open-lid virtual display capture, targeted keyboard input, accessibility actions, window-targeted clicks, and cleanup in the normal signed app. Clicks made with the earlier global-coordinate Core Graphics method missed the test window. Closed-lid operation, physical panel illumination with the lid closed, and actual Codex capture and input remain unverified. [v0.1.0-preview.2](https://github.com/underconnor/insomac/releases/tag/v0.1.0-preview.2)
 
 ## Distribution artifact
 
@@ -41,10 +41,10 @@ The suite passed 22 session cases, ten coordinator cases, bounded process I/O, d
 On Apple Silicon macOS 27.2.1, the normal signed and notarized app started Off. The test selected **Virtual Display (Experimental)** and used **Turn On**. The app owned an active 1280 × 720 secondary display and two idle-sleep assertions while On.
 
 - A display-filtered ScreenCaptureKit live stream and screenshots of the exact test window showed the expected changing marker on all four samples. Display screenshots also included the fixture marker.
-- The test window received targeted key events and an accessibility button press on all four samples. It did not receive the posted raw mouse clicks. The menu bar right-click worked separately.
+- The background test window received targeted key events and accessibility button presses on all four samples. Tagged clicks created as window-numbered AppKit `NSEvent` events retained window-local coordinates and reached the target view on both attempts when posted via `CGEvent.postToPid`. Clicks constructed directly with global coordinates in Core Graphics missed both attempts. The pointer stayed in place during all four samples. The menu bar right-click worked separately.
 - **Turn Off** restored the original display topology and released both assertions. After **Quit InsoMac**, the audit found no owned assertions or processes.
 
-The lid remained open and macOS reported the built-in display active and awake. The test used a private fixture window and standalone capture and input tools. No Codex session or closed-lid capture was exercised. Evidence is retained locally at `build/qa/virtual-desktop-2026-11-24/normal-open-20261123T153604Z.jsonl`.
+The lid remained open and macOS reported the built-in display active and awake. The test used a private fixture window and standalone capture and input tools. No Codex session or closed-lid capture was exercised. The comparison is recorded locally in `build/qa/virtual-desktop-2026-11-24/normal-open-20261123T154044Z.jsonl`. The earlier global-coordinate-only run is retained in `normal-open-20261123T153604Z.jsonl` in the same directory.
 
 ## Earlier macOS 13 validation (build 1)
 

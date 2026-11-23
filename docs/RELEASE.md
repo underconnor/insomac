@@ -1,6 +1,6 @@
 # Release preparation
 
-The current preview ZIP is Developer ID signed, notarized, stapled, and accepted by Gatekeeper after extraction. Build 2 passed open-lid virtual display capture, targeted keys, and accessibility button actions in a fixture window. Raw mouse clicks to the fixture did not register. Closed-lid operation, physical-panel illumination with the lid closed, and actual Codex capture and input remain unverified. [Download v0.1.0-preview.2](https://github.com/underconnor/insomac/releases/tag/v0.1.0-preview.2) · [QA results and checksum](QA.md)
+The current preview ZIP is Developer ID signed, notarized, stapled, and accepted by Gatekeeper after extraction. Build 2 passed open-lid virtual display capture, targeted keys, and accessibility button actions in a fixture window. Window-targeted clicks reached the fixture on both attempts. The earlier global-coordinate Core Graphics method missed both attempts. Closed-lid operation, physical-panel illumination with the lid closed, and actual Codex capture and input remain unverified. [Download v0.1.0-preview.2](https://github.com/underconnor/insomac/releases/tag/v0.1.0-preview.2) · [QA results and checksum](QA.md)
 
 To use the virtual display, right-click or Control-click the menu bar icon, select **Virtual Display (Experimental)**, and choose **Turn On**. When the app shows On, move a window onto the new display. Choose **Turn Off** when finished.
 
